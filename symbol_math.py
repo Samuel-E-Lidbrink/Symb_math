@@ -30,6 +30,7 @@ class Function(object):
         * Add functionality for multivariable functions
         * Implement more operators such as sub, div.
         * Fix methods 'evaluate', 'derivative'
+        * Error handling
 
     """
     def __init__(self, expression, variable):
@@ -79,6 +80,16 @@ class Function(object):
             object: the function derivative
         Raises:
              SystemError: Cannot compute derivative internally
+         """
+        pass
+
+    def finite_integration(self, lower_bound, upper_bound):
+        """Calculate derivative of function
+        Args:
+            lower_bound (float): lower integration bound
+            upper_bound (float): upper integration bound
+        Returns:
+            float: integral of self over lower_bound to upper_bound
          """
         pass
 
