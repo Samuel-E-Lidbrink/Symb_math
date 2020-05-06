@@ -127,6 +127,16 @@ class Function(object):
          &#34;&#34;&#34;
         pass
 
+    def finite_integration(self, lower_bound, upper_bound):
+        &#34;&#34;&#34;Calculate derivative of function
+        Args:
+            lower_bound (float): lower integration bound
+            upper_bound (float): upper integration bound
+        Returns:
+            float: integral of self over lower_bound to upper_bound
+         &#34;&#34;&#34;
+        pass
+
 
 def simplify(expression):
     &#34;&#34;&#34;Simplifies expression to simplest form.
@@ -266,6 +276,16 @@ def simplify(expression):
         Raises:
              SystemError: Cannot compute derivative internally
          &#34;&#34;&#34;
+        pass
+
+    def finite_integration(self, lower_bound, upper_bound):
+        &#34;&#34;&#34;Calculate derivative of function
+        Args:
+            lower_bound (float): lower integration bound
+            upper_bound (float): upper integration bound
+        Returns:
+            float: integral of self over lower_bound to upper_bound
+         &#34;&#34;&#34;
         pass</code></pre>
 </details>
 <h3>Methods</h3>
@@ -328,6 +348,38 @@ def simplify(expression):
     pass</code></pre>
 </details>
 </dd>
+<dt id="symbol_math.Function.finite_integration"><code class="name flex">
+<span>def <span class="ident">finite_integration</span></span>(<span>self, lower_bound, upper_bound)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Calculate derivative of function</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>lower_bound</code></strong> :&ensp;<code>float</code></dt>
+<dd>lower integration bound</dd>
+<dt><strong><code>upper_bound</code></strong> :&ensp;<code>float</code></dt>
+<dd>upper integration bound</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>float</code></dt>
+<dd>integral of self over lower_bound to upper_bound</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def finite_integration(self, lower_bound, upper_bound):
+    &#34;&#34;&#34;Calculate derivative of function
+    Args:
+        lower_bound (float): lower integration bound
+        upper_bound (float): upper integration bound
+    Returns:
+        float: integral of self over lower_bound to upper_bound
+     &#34;&#34;&#34;
+    pass</code></pre>
+</details>
+</dd>
 <dt id="symbol_math.Function.simplify"><code class="name flex">
 <span>def <span class="ident">simplify</span></span>(<span>self)</span>
 </code></dt>
@@ -365,6 +417,7 @@ def simplify(expression):
 <ul class="">
 <li><code><a title="symbol_math.Function.derivative" href="#symbol_math.Function.derivative">derivative</a></code></li>
 <li><code><a title="symbol_math.Function.evaluate" href="#symbol_math.Function.evaluate">evaluate</a></code></li>
+<li><code><a title="symbol_math.Function.finite_integration" href="#symbol_math.Function.finite_integration">finite_integration</a></code></li>
 <li><code><a title="symbol_math.Function.simplify" href="#symbol_math.Function.simplify">simplify</a></code></li>
 </ul>
 </li>
