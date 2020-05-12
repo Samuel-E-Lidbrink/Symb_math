@@ -362,7 +362,7 @@ def _simp_helper(expression_list, mem=None):
 
     def sort_group(list_to_sort):
         req_par = False
-        if list_to_sort[0] in COMMON_OPERATORS:
+        if len(list_to_sort) == 0 or isinstance(list_to_sort[0], str) and list_to_sort[0] in COMMON_OPERATORS:
             return list_to_sort, req_par
         types = dict()
         cur = []
@@ -560,10 +560,9 @@ def _simp_helper(expression_list, mem=None):
             return [const, "*"] + end
         else:
             return [const]
-    a = basic_fix(expression_list)
-    b = group(a)
-    c=sort_and_ungroup(b)
     new_list, _ = sort_and_ungroup(group(basic_fix(expression_list)))
+    if len(new_list) == 0:
+        return [0]
     fixed_list = basic_fix(new_list)
     if fixed_list in mem:
         return fixed_list
@@ -769,5 +768,5 @@ def _check_expression(expr, variable):
 
 
 
-f = Function("x^2+x+3x", "x")
+f = Function("1*0 + 1 -1", "x")
 print(f.simplify())
