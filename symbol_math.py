@@ -11,9 +11,9 @@ Example:
         >>> import symbol_math
         >>> f = symbol_math.Function("x^2+x+3x", "x")
         >>> print(f.simplify())
-        x^2 + 4.0*x
+        x^2 + 4*x
         >>> print(f.derivative())
-        2x + 4.0
+        2x + 4
 
 Todo:
     * Fix function 'simplify'
@@ -44,7 +44,7 @@ class Function(object):
             TypeError: expression not recognisable as algebraic expression or variable name equal to protected function
         """
         _check_expression(expression, variable)
-        self.expression = expression
+        self.expression = _interp_expr(replace_var(expression, variable, "X"), "X")
         self.variable = variable
 
     def simplify(self):
@@ -52,7 +52,7 @@ class Function(object):
         Returns:
             string: new expression for function
             """
-        self.expression = simplify(self.expression, self.variable)
+        self.expression = _simp_helper(self.expression)
         return str(self)
 
     def evaluate(self, value):
@@ -62,7 +62,7 @@ class Function(object):
         Returns:
             float: function evaluation
         """
-        return evaluate(self.expression, self.variable, value)
+        return evaluate(str(self), "X", value)
 
     def change_variable(self, variable):
         """Changes the current function variable to the given variable.
@@ -71,9 +71,8 @@ class Function(object):
         Returns:
             string: New function expression
         """
-        self.expression = replace_var(self.expression, self.variable, variable)
         self.variable = variable
-        return self.expression
+        return str(self)
 
     def __add__(self, other):
         """Addition operator for two functions of the same variables.
@@ -87,18 +86,18 @@ class Function(object):
          """
         if other.variable != self.variable:
             raise TypeError("Functions must have the same variable")
-        return Function(simplify(self.expression + other.expression), self.variable)
+        return Function(str(self) + "+" + str(other), self.variable)
 
     def __str__(self):
         """String representation.
         Overloads str operator with function expression"""
         out = ""
-        for char in self.expression:
-            if char in "+-":
-                out += " " + char + " "
+        for thing in self.expression:
+            if thing == "+" or thing == "-":
+                out += " " + thing + " "
             else:
-                out += char
-        return out
+                out += str(thing)
+        return replace_var(out, "X", self.variable)
 
     def derivative(self):
         """Calculate derivative of function
@@ -159,7 +158,11 @@ def simplify(expression, variable):
         TypeError: expression not recognisable as algebraic expression or variable name equal to protected function
     """
     _check_expression(expression, variable)
-    return replace_var("".join(_simp_helper(_interp_expr(replace_var(expression, variable, "X"), "X"))), "X", variable)
+    expr_list = _simp_helper(_interp_expr(replace_var(expression, variable, "X"), "X"))
+    out = ""
+    for thing in expr_list:
+        out += str(thing)
+    return replace_var(out, "X", variable)
 
 
 def _simp_helper(expression_list, mem=None):
@@ -186,10 +189,12 @@ def _simp_helper(expression_list, mem=None):
                 else:
                     next_thing = "}"
 
+                if _is_int(thing):
+                    list_to_fix[index] = int(float(thing))
                 # Remove redundant expressions
-                if not (isinstance(thing, list) or isinstance(prev_thing, list))\
-                        and ((thing == "0" and prev_thing in "+-{(" and next_thing in "+-") or \
-                        (thing == "1" and prev_thing == "^") or (thing == "1" and prev_thing in "*/")):
+                if (isinstance(prev_thing, str))\
+                        and ((thing == 0 and prev_thing in "+-{(" and isinstance(next_thing, str) and next_thing in "+-")
+                             or (thing == 1 and prev_thing == "^") or (thing == 1 and prev_thing in "*/")):
                     if index - 1 > 0:
                         list_to_fix = list_to_fix[:index - 1] + list_to_fix[index + 1:]
                     else:
@@ -199,10 +204,11 @@ def _simp_helper(expression_list, mem=None):
                     list_to_fix = list_to_fix[:index] + list_to_fix[index + 1:]
                     break
                 elif thing == "-" and (isinstance(prev_thing, str) and prev_thing in "*/^"):
-                    list_to_fix = list_to_fix[:index] + [str(-float(next_thing))] + list_to_fix[index + 2:]
+                    list_to_fix = list_to_fix[:index] + [-float(next_thing)] + list_to_fix[index + 2:]
                     break
                 elif prev_thing == "(" and next_thing == ")":
-                    if index-2 < 0 or list_to_fix[index-2] not in COMMON_OPERATORS:
+                    if index-2 < 0 or not isinstance(list_to_fix[index-2], str) or (list_to_fix[index-2] not in
+                                                                                    COMMON_OPERATORS):
                         if index - 1 > 0:
                             list_to_fix = list_to_fix[:index-1] + [thing] + list_to_fix[index+1:]
                         else:
@@ -217,12 +223,11 @@ def _simp_helper(expression_list, mem=None):
 
                 # does basic calculation
                 if not isinstance(thing, list):
-                    if thing == "/" and (isinstance(prev_thing, int) or prev_thing.isdigit()) and (isinstance(next_thing, int)
-                                                                                                   or next_thing.isdigit()):
+                    if thing == "/" and _is_int(prev_thing) and _is_int(next_thing):
                         divisor = math.gcd(int(prev_thing), int(next_thing))
                         if divisor not in [0, 1]:
-                            list_to_fix[index-1] = str(int(prev_thing)/divisor)
-                            list_to_fix[index+1] = str(int(next_thing)/divisor)
+                            list_to_fix[index-1] = int(prev_thing)/divisor
+                            list_to_fix[index+1] = int(next_thing)/divisor
                             break
 
                 # Remove redundant parenthesis
@@ -295,7 +300,7 @@ def _simp_helper(expression_list, mem=None):
         par_count = 0
         for item_index in range(0, len(list_to_group)):
             item = list_to_group[item_index]
-            if item in COMMON_OPERATORS and not is_op and is_first:
+            if isinstance(item, str) and item in COMMON_OPERATORS and not is_op and is_first:
                 is_op = True
                 op = item
                 if item in _OPERATOR_INVERSE.keys():
@@ -369,11 +374,11 @@ def _simp_helper(expression_list, mem=None):
                 item = list_to_sort[item_index]
             else:
                 item = "}"
-            if (item == "+" or item == "-" or item == "}") and (len(cur) > 0 and
-                                                                (item_index - 1 >= 0 and list_to_sort[item_index - 1] != "(")):
+            if (item == "+" or item == "-" or item == "}") and\
+                    (len(cur) > 0 and (item_index - 1 >= 0 and list_to_sort[item_index - 1] != "(")):
                 fixed_part = fix_mult(cur)
                 if len(fixed_part) == 1:
-                    types["1"] = [["1"], types.setdefault("1", ["", 0])[1] + prev_sign * float(fixed_part[0])]
+                    types["1"] = [[1], types.setdefault("1", [[1], 0])[1] + prev_sign * fixed_part[0]]
                 else:
                     types[str(fixed_part[2:])] = [fixed_part[2:], types.setdefault(str(fixed_part[2:]), ["", 0])[1] +
                                                   prev_sign * float(fixed_part[0])]
@@ -396,9 +401,9 @@ def _simp_helper(expression_list, mem=None):
             elif types[dic_key][1] == -1:
                 res.extend(["-"] + types[dic_key][0])
             elif types[dic_key][1] > 0:
-                res.extend(["+", str(types[dic_key][1]), "*"] + types[dic_key][0])
+                res.extend(["+", types[dic_key][1], "*"] + types[dic_key][0])
             elif types[dic_key][1] < 0:
-                res.extend(["-", str(-types[dic_key][1]), "*"] + types[dic_key][0])
+                res.extend(["-", -types[dic_key][1], "*"] + types[dic_key][0])
         return res, req_par
 
     def fix_mult(list_to_fix):
@@ -432,7 +437,7 @@ def _simp_helper(expression_list, mem=None):
                                 exp.append("*")
                         elif sign == -1:
                             if len(exp) == 0:
-                                exp.append("1")
+                                exp.append(1)
                             exp.append("/")
                         exp.extend(["X", "^", x_pow])
                         prev = item
@@ -440,7 +445,7 @@ def _simp_helper(expression_list, mem=None):
                 else:
                     x_pow = 1
                 if isinstance(x_pow, int) or x_pow.isdigit():
-                    var_pow += sign * int(x_pow)
+                    var_pow += sign * int(float(x_pow))
                 else:
                     var_pow += sign * float(x_pow)
             elif _is_float(item):
@@ -456,7 +461,7 @@ def _simp_helper(expression_list, mem=None):
                                 exp.append("*")
                         elif sign == -1:
                             if len(exp) == 0:
-                                exp.append("1")
+                                exp.append(1)
                             exp.append("/")
                         exp.extend([item, "^", num_pow])
                         prev = item
@@ -475,7 +480,7 @@ def _simp_helper(expression_list, mem=None):
                             par.append("*")
                     elif sign == -1:
                         if len(par) == 0:
-                            par.append("1")
+                            par.append(1)
                         par.append("/")
                     if next_i == "^":
                         par.extend([item, "^", list_to_fix[item_index + 2]])
@@ -496,7 +501,7 @@ def _simp_helper(expression_list, mem=None):
                 par.append(par_to_check[dic_key][0])
             elif par_to_check[dic_key][1] == -1:
                 if len(par) == 0:
-                    par.append("1")
+                    par.append(1)
                 par.extend(["/"] + [par_to_check[dic_key][0]])
             elif par_to_check[dic_key][1] > 0:
                 if len(par) > 0:
@@ -504,7 +509,7 @@ def _simp_helper(expression_list, mem=None):
                 par.extend([par_to_check[dic_key][0]] + ["^"] + [str(par_to_check[dic_key][1])])
             else:
                 if len(par) == 0:
-                    par.append("1")
+                    par.append(1)
                 par.extend(["/"] + [par_to_check[dic_key][0]] + ["^"] + [str(-par_to_check[dic_key][1])])
 
 
@@ -526,19 +531,19 @@ def _simp_helper(expression_list, mem=None):
                         break
         if len(exp_to_check) == 1:
             if len(exp) == 0:
-                exp = [str(exp_to_check[0]), "^", "X"]
+                exp = [exp_to_check[0], "^", "X"]
             else:
-                exp.extend(["*", str(exp_to_check[0]), "^", "X"])
+                exp.extend(["*", exp_to_check[0], "^", "X"])
         elif len(exp_to_check) > 1:
             if len(exp) > 0:
                 exp.append("*")
             for dig_index in range(0, len(exp_to_check)):
-                exp.extend([str(exp_to_check[dig_index]), "^", "X"])
+                exp.extend([exp_to_check[dig_index], "^", "X"])
                 if dig_index < len(exp_to_check) - 1:
                     exp.append("*")
 
         if const == 0:
-            return ["0"]
+            return [0]
         if len(exp) == 0:
             end = par
         elif len(par) == 0:
@@ -549,12 +554,12 @@ def _simp_helper(expression_list, mem=None):
             if len(end) > 0:
                 end = ["*"] + end
             if not var_pow == 1:
-                end = ["^", str(var_pow)] + end
+                end = ["^", var_pow] + end
             end = ["X"] + end
         if len(end) > 0:
-            return [str(const), "*"] + end
+            return [const, "*"] + end
         else:
-            return [str(const)]
+            return [const]
     a = basic_fix(expression_list)
     b = group(a)
     c=sort_and_ungroup(b)
@@ -564,6 +569,21 @@ def _simp_helper(expression_list, mem=None):
         return fixed_list
     else:
         return _simp_helper(fixed_list, mem)
+
+
+def _is_int(string):
+    if not isinstance(string, (str, int, float)):
+        return False
+    dot = False
+    for char in str(string):
+        if char not in "1234567890.":
+            return False
+        if char == ".":
+            dot = True
+        elif dot:
+            if char != "0":
+                return False
+    return True
 
 
 def _is_float(string):
@@ -634,7 +654,10 @@ def _interp_expr(expression, variable, value=None):
                 interp_expr.append("^")
             curr += char
             if index + 1 == len(to_check) or not to_check[index + 1] in "0123456789.":
-                interp_expr.append(curr)
+                if _is_int(curr):
+                    interp_expr.append(int(float(curr)))
+                else:
+                    interp_expr.append(float(curr))
                 curr = ""
         elif char == "X":
             if prev_char in "1234567890X":
@@ -672,7 +695,7 @@ def evaluate(expression, variable, value):
     _check_expression(expression, variable)
     interp = _interp_expr(expression, variable, value)
     for index in range(0, len(interp)):
-        thing = interp[index]
+        thing = str(interp[index])
         if thing == "^":
             interp[index] = "**"
         elif thing in COMMON_OPERATORS:
@@ -746,5 +769,5 @@ def _check_expression(expr, variable):
 
 
 
-f = Function("x", "x")
-print(f.finite_integration(0, 1))
+f = Function("x^2+x+3x", "x")
+print(f.simplify())
