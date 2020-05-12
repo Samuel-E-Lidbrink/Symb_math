@@ -350,6 +350,8 @@ def _simp_helper(expression_list, mem=None):
                         (item_index > 0 and isinstance(list_to_fix[item_index - 1], str)
                          and list_to_fix[item_index - 1] in COMMON_OPERATORS):
                     nest_par = True
+                if res[-1] == "^":
+                    nest_par = True
                 if nest_par:
                     res.append("(")
                 for nested_item in nested_list:
@@ -560,6 +562,11 @@ def _simp_helper(expression_list, mem=None):
             return [const, "*"] + end
         else:
             return [const]
+
+    a =basic_fix(expression_list)
+    b = group(a)
+    c = sort_and_ungroup(b)
+    c
     new_list, _ = sort_and_ungroup(group(basic_fix(expression_list)))
     if len(new_list) == 0:
         return [0]
@@ -710,6 +717,8 @@ def _check_expression(expr, variable):
     """Checks whether the expr is a valid string expression of an arithmetic expression"""
     if not isinstance(expr, str):
         raise TypeError("Expression must be a string")
+    if expr == "":
+        raise TypeError("Expression must be non empty")
     if not isinstance(variable, str):
         raise TypeError("Variable must be a string")
     for char in variable:
@@ -727,7 +736,12 @@ def _check_expression(expr, variable):
     parenthesis_list = []
     prev_char = "{"  # { signifies the "character" before the first character
     dot_allowed = True
-    for char in simple_expr:
+    for char_index in range(0, len(simple_expr)):
+        char = simple_expr[char_index]
+        if char_index + 1 < len(simple_expr):
+            next_char = simple_expr[char_index+1]
+        else:
+            next_char = "{"
         if char not in ".0123456789()[]+-*^/x{}":
             raise TypeError("Invalid character: " + char + " in expression " + expr)
         if char in "([":
@@ -758,6 +772,8 @@ def _check_expression(expr, variable):
                 raise TypeError("Two decimal points in one number in expression: " + expr)
             else:
                 dot_allowed = False
+        elif prev_char == "^" and (next_char == "^" or char == "x" and next_char in "1234567890."):
+            raise TypeError("Unclear use of exponent: " + prev_char + char + next_char + " in: " + expr)
         if char in "+-*^/()[]x}":
             dot_allowed = True
         prev_char = char
@@ -768,5 +784,5 @@ def _check_expression(expr, variable):
 
 
 
-f = Function("1*0 + 1 -1", "x")
+f = Function("10^x4", "x")
 print(f.simplify())
