@@ -11,9 +11,9 @@ Example:
         >>> import symbol_math
         >>> f = symbol_math.Function("x^2+x+3x", "x")
         >>> print(f.simplify())
-        x^2 + 4x
+        x^2 + 4.0*x
         >>> print(f.derivative())
-        2x + 4
+        2x + 4.0
 
 Todo:
     * Fix function 'simplify'
@@ -53,7 +53,7 @@ class Function(object):
             string: new expression for function
             """
         self.expression = simplify(self.expression, self.variable)
-        return self.expression
+        return str(self)
 
     def evaluate(self, value):
         """Evaluates the function at specified value
@@ -92,7 +92,13 @@ class Function(object):
     def __str__(self):
         """String representation.
         Overloads str operator with function expression"""
-        return self.expression
+        out = ""
+        for char in self.expression:
+            if char in "+-":
+                out += " " + char + " "
+            else:
+                out += char
+        return out
 
     def derivative(self):
         """Calculate derivative of function
@@ -103,19 +109,43 @@ class Function(object):
          """
         pass
 
-    def finite_integration(self, lower_bound, upper_bound):
+    def finite_integration(self, lower_bound, upper_bound, tol=0.1):
         """Calculate derivative of function
         Args:
             lower_bound (float): lower integration bound
             upper_bound (float): upper integration bound
+            tol (float): error tolerance for calculation. Must be non-negative
         Returns:
             float: integral of self over lower_bound to upper_bound
+        Raises:
+            TypeError: If either lower_bound, upper_bound or tol is not of type float
+            ValueError: If tol < 0
          """
-        pass
+        for arg in [lower_bound, upper_bound, tol]:
+            if not isinstance(arg, (float, int)):
+                raise TypeError("Arguments must be floats or ints")
+        if tol < 0:
+            raise ValueError("tol must be positive, not " + str(tol))
+        val, prev_val = 0, tol + 1
+        exp = 1
+        while abs(prev_val-val) > tol:
+            prev_val = val
+            exp += 1
+            n = 10 ** exp
+            part_sum = (self.evaluate(lower_bound) + self.evaluate(upper_bound))/2
+            for k in range(1, n):
+                point = lower_bound + k/n* (upper_bound-lower_bound)
+                part_sum += self.evaluate(point) * 1/n
+            val = part_sum
+        return val
 
 
-COMMON_OPERATORS = ["sinh", "cosh", "tanh", "asinh", "acosh", "atanh", "sin", "cos", "tan", "asin", "atan", "acos",
+
+COMMON_OPERATORS = ["asinh", "acosh", "atanh", "sinh", "cosh", "tanh", "asin", "acos", "atan", "sin", "tan", "cos",
                     "log", "exp"]
+_OPERATOR_INVERSE = {"sinh": "asinh", "cosh": "acosh", "tanh": "atanh", "asinh": "sinh", "acosh": "cosh",
+                     "atanh": "tanh", "sin": "asin", "cos": "acos", "tan": "atan", "asin": "sin", "atan": "tan",
+                     "acos": "cos", "log": "exp", "exp": "log"}
 
 
 def simplify(expression, variable):
@@ -129,7 +159,7 @@ def simplify(expression, variable):
         TypeError: expression not recognisable as algebraic expression or variable name equal to protected function
     """
     _check_expression(expression, variable)
-    return "".join(_simp_helper(_interp_expr(expression.replace(variable, "X"), "X"))).replace("X", variable)
+    return replace_var("".join(_simp_helper(_interp_expr(replace_var(expression, variable, "X"), "X"))), "X", variable)
 
 
 def _simp_helper(expression_list, mem=None):
@@ -139,93 +169,196 @@ def _simp_helper(expression_list, mem=None):
         mem = []
     mem.append(expression_list.copy())
 
-    prev_thing = "{"
-    for index in range(0, len(expression_list)):
-        thing = expression_list[index]
-        if index + 1 < len(expression_list):
-            next_thing = expression_list[index + 1]
-        else:
-            next_thing = "}"
-
-        # Remove redundant expressions
-        if not (isinstance(thing, list) or isinstance(prev_thing, list))\
-                and ((thing == "0" and prev_thing in "+-{(" and next_thing in "+-") or \
-                (thing == "1" and prev_thing == "^") or (thing == "1" and prev_thing in "*/") or \
-                (thing in "*/" and prev_thing == "1")):
-            if index - 1 > 0:
-                expression_list = expression_list[:index - 1] + expression_list[index + 1:]
-            else:
-                expression_list = expression_list[index + 1:]
-            break
-        elif prev_thing == "(" and next_thing == ")":
-            if index-2 < 0 or expression_list[index-2] not in COMMON_OPERATORS:
-                if index - 1 > 0:
-                    expression_list = expression_list[:index-1] + [thing] + expression_list[index+1:]
+    #  does basic simplifications
+    def basic_fix(list_to_fix):
+        prev_expr = []
+        while list_to_fix != prev_expr:
+            prev_expr = list_to_fix.copy()
+            prev_thing = "{"
+            par = {0: [""]}
+            par_ok = {0: False}
+            par_mult = {}
+            par_count = 0
+            for index in range(0, len(list_to_fix)):
+                thing = list_to_fix[index]
+                if index + 1 < len(list_to_fix):
+                    next_thing = list_to_fix[index + 1]
                 else:
-                    expression_list = [thing] + expression_list[index+1:]
-                break
+                    next_thing = "}"
 
-        # does basic calculation
-        if not isinstance(thing, list):
-            if thing == "/" and (isinstance(prev_thing, int) or prev_thing.isdigit()) and (isinstance(next_thing, int) or
-                                                                                           next_thing.isdigit()):
-                divisor = math.gcd(int(prev_thing), int(next_thing))
-                if divisor not in [0, 1]:
-                    expression_list[index-1] = str(int(prev_thing)/divisor)
-                    expression_list[index+1] = str(int(next_thing)/divisor)
-                    break
-            elif thing in "+-*/^" and _is_float(prev_thing) and _is_float(next_thing):
-                if index + 2 == len(expression_list) or expression_list[index + 2] != "^":
-                    new_num = eval(prev_thing + thing.replace("^", "**") + next_thing)
+                # Remove redundant expressions
+                if not (isinstance(thing, list) or isinstance(prev_thing, list))\
+                        and ((thing == "0" and prev_thing in "+-{(" and next_thing in "+-") or \
+                        (thing == "1" and prev_thing == "^") or (thing == "1" and prev_thing in "*/")):
                     if index - 1 > 0:
-                        expression_list = expression_list[:index-1] + [str(new_num)] + expression_list[index+1:]
+                        list_to_fix = list_to_fix[:index - 1] + list_to_fix[index + 1:]
                     else:
-                        expression_list = [str(new_num)] + expression_list[index+1:]
+                        list_to_fix = list_to_fix[index + 1:]
+                    break
+                elif thing == "+" and (isinstance(prev_thing, str) and prev_thing in "*/^"):
+                    list_to_fix = list_to_fix[:index] + list_to_fix[index + 1:]
+                    break
+                elif thing == "-" and (isinstance(prev_thing, str) and prev_thing in "*/^"):
+                    list_to_fix = list_to_fix[:index] + [str(-float(next_thing))] + list_to_fix[index + 2:]
+                    break
+                elif prev_thing == "(" and next_thing == ")":
+                    if index-2 < 0 or list_to_fix[index-2] not in COMMON_OPERATORS:
+                        if index - 1 > 0:
+                            list_to_fix = list_to_fix[:index-1] + [thing] + list_to_fix[index+1:]
+                        else:
+                            list_to_fix = [thing] + list_to_fix[index+1:]
+                        break
+                elif thing == "+" and (prev_thing == "{" or prev_thing == "("):
+                    if index > 0:
+                        list_to_fix = list_to_fix[:index] + list_to_fix[index+1:]
+                    else:
+                        list_to_fix = list_to_fix[index+1:]
                     break
 
-        prev_thing = thing
+                # does basic calculation
+                if not isinstance(thing, list):
+                    if thing == "/" and (isinstance(prev_thing, int) or prev_thing.isdigit()) and (isinstance(next_thing, int)
+                                                                                                   or next_thing.isdigit()):
+                        divisor = math.gcd(int(prev_thing), int(next_thing))
+                        if divisor not in [0, 1]:
+                            list_to_fix[index-1] = str(int(prev_thing)/divisor)
+                            list_to_fix[index+1] = str(int(next_thing)/divisor)
+                            break
+
+                # Remove redundant parenthesis
+                for outside in range(par_count - 1, 0, -1):
+                    if par_ok[outside]:
+                        par[outside].append(thing)
+                if thing == "(":
+                    par_count += 1
+                    if prev_thing == "+" or prev_thing == "{":
+                        par[par_count] = ["+"]
+                        par_ok[par_count] = True
+                    elif prev_thing == "-":
+                        par[par_count] = ["-"]
+                        par_ok[par_count] = False
+                    elif prev_thing == "*" and _is_float(list_to_fix[index-2])\
+                            and (index - 3 <= 0 or list_to_fix[index - 3] == "+" or list_to_fix[index-3] == "-"):
+                        par_mult[par_count] = list_to_fix[index - 2]
+                        if index-3 <= 0 or list_to_fix[index-3] == "+":
+                            par[par_count] = ["+"]
+                        else:
+                            par[par_count] = ["-"]
+                        par_ok[par_count] = True
+                    else:
+                        par_ok[par_count] = False
+                elif thing == ")":
+                    if par_ok[par_count] and (isinstance(next_thing, str) and next_thing in "+-}"):
+                        content = par[par_count]
+                        par_len = len(content)
+                        if content[1] == "+" or content[1] == "-":
+                            content = content[1:]
+                        to_mult = float(par_mult.setdefault(par_count, 1))
+                        if to_mult != 1:
+                            multiplied = []
+                            for item in content:
+                                if item == "+" or item == "-":
+                                    multiplied.extend([item, str(to_mult), "*"])
+                                else:
+                                    multiplied.append(item)
+                            content = multiplied
+                            par_len += 2
+                        if index - par_len -1 > 0:
+                            list_to_fix = list_to_fix[:index - par_len-1] + content.copy() + list_to_fix[index + 1:]
+                        else:
+                            list_to_fix = content.copy() + list_to_fix[index + 1:]
+                        break
+                    par_count -= 1
+                elif par_ok[par_count]:
+                    if par[par_count][0] == "-":
+                        if thing == "+":
+                            to_add = "-"
+                        elif thing == "-":
+                            to_add = "+"
+                        else:
+                            to_add = thing
+                    else:
+                        to_add = thing
+                    par[par_count].append(to_add)
+
+                prev_thing = thing
+        return list_to_fix
 
     # groups similar object together in preferred order
     def group(list_to_group):
         first_level = []
         is_first = True
+        is_op = False
+        op_inv = False
+        op = ""
         second_level = []
         par_count = 0
-        for item in list_to_group:
-            if item == "(":
+        for item_index in range(0, len(list_to_group)):
+            item = list_to_group[item_index]
+            if item in COMMON_OPERATORS and not is_op and is_first:
+                is_op = True
+                op = item
+                if item in _OPERATOR_INVERSE.keys():
+                    if list_to_group[item_index + 1] == "(" and list_to_group[item_index + 2] == _OPERATOR_INVERSE[item]:
+                        op_inv = True
+            elif item == "(":
                 if not is_first:
                     second_level.append(item)
                 par_count += 1
                 is_first = False
             elif item == ")":
                 par_count -= 1
+                if op_inv and par_count == 1:
+                    if list_to_group[item_index + 1] != ")":
+                        op_inv = False
                 if par_count == 0:
+                    if is_op:
+                        is_op = False
+                        if op_inv:
+                            first_level.append(second_level[2:-1])
+                        elif second_level[0] == "(" and second_level[-1] == ")":
+                            first_level.append([op, group(second_level[1:-1])])
+                        else:
+                            first_level.append([op, group(second_level)])
+                    else:
+                        first_level.append(group(second_level))
                     is_first = True
-                    first_level.append(group(second_level))
                     second_level = []
                 else:
                     second_level.append(item)
             elif is_first:
                 first_level.append(item)
             else:
-                second_level.append(thing)
+                second_level.append(item)
         return first_level
 
     def sort_and_ungroup(list_to_fix):
+        while len(list_to_fix) == 1 and isinstance(list_to_fix[0], list):
+            list_to_fix = list_to_fix[0]
         res = []
-        list_to_fix = sort_group(list_to_fix)
-        for item in list_to_fix:
+        list_to_fix, req_par = sort_group(list_to_fix.copy())
+        for item_index in range(0, len(list_to_fix)):
+            item = list_to_fix[item_index]
             if isinstance(item, list):
-                res.append("(")
-                nested_list = sort_and_ungroup(item)
+                nested_list, nest_par = sort_and_ungroup(item)
+                if (item_index + 1 < len(list_to_fix) and list_to_fix[item_index + 1] == "^") or\
+                        (item_index > 0 and isinstance(list_to_fix[item_index - 1], str)
+                         and list_to_fix[item_index - 1] in COMMON_OPERATORS):
+                    nest_par = True
+                if nest_par:
+                    res.append("(")
                 for nested_item in nested_list:
                     res.append(nested_item)
-                res.append(")")
+                if nest_par:
+                    res.append(")")
             else:
                 res.append(item)
-        return res
+        return res, req_par
 
     def sort_group(list_to_sort):
+        req_par = False
+        if list_to_sort[0] in COMMON_OPERATORS:
+            return list_to_sort, req_par
         types = dict()
         cur = []
         prev_sign = 1
@@ -236,11 +369,11 @@ def _simp_helper(expression_list, mem=None):
                 item = list_to_sort[item_index]
             else:
                 item = "}"
-            if (item == "+" or item == "-" or item == "}") and (len(cur) > 0 or
-                                                                item_index - 1 >= 0 and cur[item_index - 1] != "("):
+            if (item == "+" or item == "-" or item == "}") and (len(cur) > 0 and
+                                                                (item_index - 1 >= 0 and list_to_sort[item_index - 1] != "(")):
                 fixed_part = fix_mult(cur)
                 if len(fixed_part) == 1:
-                    types["1"] = ["1", types.setdefault("1", ["", 0])[1] + prev_sign * float(fixed_part[0])]
+                    types["1"] = [["1"], types.setdefault("1", ["", 0])[1] + prev_sign * float(fixed_part[0])]
                 else:
                     types[str(fixed_part[2:])] = [fixed_part[2:], types.setdefault(str(fixed_part[2:]), ["", 0])[1] +
                                                   prev_sign * float(fixed_part[0])]
@@ -252,16 +385,21 @@ def _simp_helper(expression_list, mem=None):
             else:
                 cur.append(item)
         res = []
-        for dic_item in types.items():
-            if dic_item[1][1] == 0:
+        keys = sorted(types.keys())
+        if len(keys) > 1:
+            req_par = True
+        for dic_key in keys:
+            if types[dic_key][1] == 0:
                 continue
-            elif dic_item[1][1] == 1:
-                res.extend(["+"] + dic_item[1][0])
-            elif dic_item[1][1] == -1:
-                res.extend(["-"] + dic_item[1][0])
-            elif dic_item[1][1] > 0:
-                res.extend(["+", str(dic_item[1][1]), "*"] + dic_item[1][0])
-        return res
+            elif types[dic_key][1] == 1:
+                res.extend(["+"] + types[dic_key][0])
+            elif types[dic_key][1] == -1:
+                res.extend(["-"] + types[dic_key][0])
+            elif types[dic_key][1] > 0:
+                res.extend(["+", str(types[dic_key][1]), "*"] + types[dic_key][0])
+            elif types[dic_key][1] < 0:
+                res.extend(["-", str(-types[dic_key][1]), "*"] + types[dic_key][0])
+        return res, req_par
 
     def fix_mult(list_to_fix):
         # Returns an expression without +- simplified with a leading coefficient (and perhaps *[...])
@@ -281,9 +419,9 @@ def _simp_helper(expression_list, mem=None):
             if (isinstance(item, str) and item in "*/^") or (isinstance(prev, str) and prev == "^"):
                 prev = item
                 continue
-            if prev in "*{":
+            if prev == "*" or prev == "{":
                 sign = 1
-            elif prev in "/":
+            elif prev == "/":
                 sign = -1
             if item == "X":
                 if next_i == "^":
@@ -348,25 +486,27 @@ def _simp_helper(expression_list, mem=None):
                         extra = 1
                     par_to_check[str(item)] = [item, par_to_check.setdefault(str(item), [[], 0])[1] + sign * extra]
             prev = item
-        for dic_item in par_to_check.items():
-            if dic_item[1][1] == 0:
+        par_keys = sorted(par_to_check.keys())
+        for dic_key in par_keys:
+            if par_to_check[dic_key][1] == 0:
                 continue
-            elif dic_item[1][1] == 1:
+            elif par_to_check[dic_key][1] == 1:
                 if len(par) > 0:
                     par.append("*")
-                par.append([dic_item[1][0]])
-            elif dic_item[1][1] == -1:
+                par.append(par_to_check[dic_key][0])
+            elif par_to_check[dic_key][1] == -1:
                 if len(par) == 0:
                     par.append("1")
-                par.extend(["/"] + [dic_item[1][0]])
-            elif dic_item[1][1] > 0:
+                par.extend(["/"] + [par_to_check[dic_key][0]])
+            elif par_to_check[dic_key][1] > 0:
                 if len(par) > 0:
                     par.append("*")
-                par.extend([dic_item[1][0]] + ["^"] + [str(dic_item[1][1])])
+                par.extend([par_to_check[dic_key][0]] + ["^"] + [str(par_to_check[dic_key][1])])
             else:
                 if len(par) == 0:
                     par.append("1")
-                par.extend(["/"] + [dic_item[1][0]] + ["^"] + [str(dic_item[1][1])])
+                par.extend(["/"] + [par_to_check[dic_key][0]] + ["^"] + [str(-par_to_check[dic_key][1])])
+
 
         # simplifies exponents
         prev_check = []
@@ -415,12 +555,15 @@ def _simp_helper(expression_list, mem=None):
             return [str(const), "*"] + end
         else:
             return [str(const)]
-    a = sort_and_ungroup(group(expression_list))
-    new_list = sort_and_ungroup(group(expression_list))
-    if new_list in mem:
-        return new_list
+    a = basic_fix(expression_list)
+    b = group(a)
+    c=sort_and_ungroup(b)
+    new_list, _ = sort_and_ungroup(group(basic_fix(expression_list)))
+    fixed_list = basic_fix(new_list)
+    if fixed_list in mem:
+        return fixed_list
     else:
-        return _simp_helper(new_list, mem)
+        return _simp_helper(fixed_list, mem)
 
 
 def _is_float(string):
@@ -464,14 +607,14 @@ def _interp_expr(expression, variable, value=None):
     to_check = replace_var(expression, variable, "X").replace("[", "(").replace("]", ")")
     for index in range(0, len(to_check)):
         char = to_check[index]
-        if char == "(" and prev_char in "0123456789X" or char in "0123456789X" and prev_char == ")":
+        if char == "(" and prev_char in "0123456789X)" or char in "0123456789X" and prev_char == ")":
             while add_par > 0:
                 interp_expr.append(")")
                 add_par -= 1
             interp_expr.append("*")
         if char in "".join(COMMON_OPERATORS):
             if prev_char not in "".join(COMMON_OPERATORS).lower() + "{":
-                if prev_char in "0123456789X":
+                if prev_char in "0123456789X)":
                     while add_par > 0:
                         interp_expr.append(")")
                         add_par -= 1
@@ -583,9 +726,11 @@ def _check_expression(expr, variable):
                 raise TypeError("Empty parenthesis: " + char + prev_char + " in expression " + expr)
         elif char in "^*/" and prev_char == "{":
             raise TypeError("Invalid starting operator: " + char + " in expression " + expr)
-        elif char in "+-*/^" and prev_char in "+-*/^([}.":
+        elif char in "+-*/^" and prev_char in "+-*/^[}.":
             raise TypeError("Invalid operator usage: " + prev_char.replace("}", "...") + char + " in expression "
                             + expr)
+        elif char in "*/" and prev_char == "(":
+            raise TypeError("Invalid operator usage: " + prev_char + char + " in expression " + expr)
         elif char == ".":
             if not dot_allowed:
                 raise TypeError("Two decimal points in one number in expression: " + expr)
@@ -600,4 +745,6 @@ def _check_expression(expr, variable):
         raise TypeError("Missing " + str(len(parenthesis_list)) + " ending parenthesis" + " in expression " + expr)
 
 
-print(simplify("1*2x-x+x^2", "x"))
+
+f = Function("x", "x")
+print(f.finite_integration(0, 1))
