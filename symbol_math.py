@@ -10,16 +10,19 @@ Example:
 
         >>> import symbol_math
         >>> f = symbol_math.Function("x^2+x+3x", "x")
-        >>> print(f.simplify())
-        x^2 + 4*x
-        >>> print(f.derivative())
-        2x + 4
-
-Todo:
-    * Fix function 'simplify'
-    * Add more functionality.
-    * Improve documentation.
-    * Error handling
+        >>> f.simplify()
+        'x^2 + 4*x'
+        >>> f.derivative()
+        '4 + 2*x'
+        >>> g = Function("exp(y)", "y")
+        >>> f.change_variable("y")
+        '4 + 2*y'
+        >>> print(f+g)
+        4 + 2*y + exp(y)
+        >>> f.evaluate(3)
+        10.0
+        >>> g.finite_integration(0, 1, tol=1e-5)
+        1.7182818298909466
 """
 import math
 
@@ -27,11 +30,6 @@ import math
 class Function(object):
     """A class for storing functions.
 
-    Todo:
-        * Add functionality for multivariable functions
-        * Implement more operators such as sub, div.
-        * Fix methods 'evaluate', 'derivative'
-        * Error handling
 
     """
 
@@ -44,7 +42,7 @@ class Function(object):
             TypeError: expression not recognisable as algebraic expression or variable name equal to protected function
         """
         _check_expression(expression, variable)
-        self.expression = _interp_expr(replace_var(expression, variable, "X"), "X")
+        self._expression = _interp_expr(replace_var(expression, variable, "X"), "X")
         self.variable = variable
 
     def simplify(self):
@@ -52,7 +50,7 @@ class Function(object):
         Returns:
             string: new expression for function
             """
-        self.expression = _simp_helper(self.expression)
+        self._expression = _simp_helper(self._expression)
         return str(self)
 
     def evaluate(self, value):
@@ -62,7 +60,7 @@ class Function(object):
         Returns:
             float: function evaluation
         """
-        return evaluate(str(self), "X", value)
+        return evaluate(str(self), self.variable, value)
 
     def change_variable(self, variable):
         """Changes the current function variable to the given variable.
@@ -91,7 +89,7 @@ class Function(object):
     def __str__(self):
         """String representation.
         Overloads str operator with function expression"""
-        return _fix_out(self.expression, self.variable)
+        return _fix_out(self._expression, self.variable)
 
     def derivative(self):
         """Calculate derivative of function
@@ -100,9 +98,10 @@ class Function(object):
         Raises:
              SystemError: Cannot compute derivative internally
          """
-        pass
+        self._expression = _der_helper(self._expression)
+        return str(self)
 
-    def finite_integration(self, lower_bound, upper_bound, tol=0.1):
+    def finite_integration(self, lower_bound, upper_bound, tol=0.01):
         """Calculate derivative of function
         Args:
             lower_bound (float): lower integration bound
@@ -125,7 +124,7 @@ class Function(object):
             prev_val = val
             exp += 1
             n = 10 ** exp
-            part_sum = (self.evaluate(lower_bound) + self.evaluate(upper_bound))/2
+            part_sum = (self.evaluate(lower_bound) + self.evaluate(upper_bound))/2/n
             for k in range(1, n):
                 point = lower_bound + k/n* (upper_bound-lower_bound)
                 part_sum += self.evaluate(point) * 1/n
@@ -258,8 +257,7 @@ def _der_helper(expression_list):
         elif len(group) == 1 and isinstance(group[0], list):
             return der_grouped(group[0])
         else:
-            print(group)
-            raise SystemError
+            raise SystemError("Derivation went wrong :(.")
 
     def var_in(group):
         for item in group:
@@ -827,6 +825,8 @@ def evaluate(expression, variable, value):
             interp[index] = "**"
         elif thing in COMMON_OPERATORS:
             interp[index] = "math." + thing
+        else:
+            interp[index] = thing
     try:
         return float(eval("".join(interp)))
     except ZeroDivisionError:
@@ -904,6 +904,3 @@ def _check_expression(expr, variable):
         raise TypeError("Missing " + str(len(parenthesis_list)) + " ending parenthesis" + " in expression " + expr)
 
 
-
-f = Function("x^sinx", "x")
-print(derivative("exp(log(x)+1)", "x"))
