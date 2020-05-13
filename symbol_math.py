@@ -10,17 +10,17 @@ Example:
 
         >>> import symbol_math
         >>> f = symbol_math.Function("x^2+x+3x", "x")
-        >>> f.simplify()
-        'x^2 + 4*x'
-        >>> f.derivative()
-        '4 + 2*x'
+        >>> print(f.simplify())
+        x^2 + 4*x
+        >>> print(f.derivative())
+        4 + 2*x
         >>> g = Function("exp(y)", "y")
-        >>> f.change_variable("y")
-        '4 + 2*y'
+        >>> print(f.change_variable("y"))
+        y^2 + 4*y
         >>> print(f+g)
-        4 + 2*y + exp(y)
+        y^2 + 4*y + exp(y)
         >>> f.evaluate(3)
-        10.0
+        21.0
         >>> g.finite_integration(0, 1, tol=1e-5)
         1.7182818298909466
 """
@@ -51,7 +51,7 @@ class Function(object):
             string: new expression for function
             """
         self._expression = _simp_helper(self._expression)
-        return str(self)
+        return self
 
     def evaluate(self, value):
         """Evaluates the function at specified value
@@ -70,7 +70,7 @@ class Function(object):
             string: New function expression
         """
         self.variable = variable
-        return str(self)
+        return self
 
     def __add__(self, other):
         """Addition operator for two functions of the same variables.
@@ -98,8 +98,9 @@ class Function(object):
         Raises:
              SystemError: Cannot compute derivative internally
          """
-        self._expression = _der_helper(self._expression)
-        return str(self)
+        der = Function("1", self.variable)
+        der._expression = _der_helper(self._expression)
+        return der
 
     def finite_integration(self, lower_bound, upper_bound, tol=0.01):
         """Calculate derivative of function
