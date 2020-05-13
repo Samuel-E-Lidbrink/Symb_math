@@ -91,13 +91,7 @@ class Function(object):
     def __str__(self):
         """String representation.
         Overloads str operator with function expression"""
-        out = ""
-        for thing in self.expression:
-            if thing == "+" or thing == "-":
-                out += " " + thing + " "
-            else:
-                out += str(thing)
-        return replace_var(out, "X", self.variable)
+        return _fix_out(self.expression, self.variable)
 
     def derivative(self):
         """Calculate derivative of function
@@ -139,12 +133,18 @@ class Function(object):
         return val
 
 
-
 COMMON_OPERATORS = ["asinh", "acosh", "atanh", "sinh", "cosh", "tanh", "asin", "acos", "atan", "sin", "tan", "cos",
                     "log", "exp"]
 _OPERATOR_INVERSE = {"sinh": "asinh", "cosh": "acosh", "tanh": "atanh", "asinh": "sinh", "acosh": "cosh",
                      "atanh": "tanh", "sin": "asin", "cos": "acos", "tan": "atan", "asin": "sin", "atan": "tan",
                      "acos": "cos", "log": "exp", "exp": "log"}
+_OPERATOR_DERIVATIVE = {"sinh": "cosh", "cosh": "sinh", "tanh": [1, "/", ["cosh", ["X"]], "^", 2],
+                        "asinh": [1, "/", ["X", "^", 2, "+", 1], "^", 0.5],
+                        "acosh": [1, "/", ["X", "^", 2, "-", 1], "^", 0.5],
+                     "atanh": [1, "/", [1, "-", "X", "^", 2]], "sin": "cos", "cos": "sin",
+                        "tan": [1, "/", ["cos", ["X"]], "^", 2], "asin": [1, "/", [1, "-", "X", "^", 2], "^", 0.5],
+                        "atan": [1, "/", ["X", "^", 2, "+", 1]], "acos": ["-", 1, "/", [1, "-", "X", "^", 2], "^", 0.5],
+                        "log": [1, "/", "X"], "exp": "exp"}
 
 
 def simplify(expression, variable):
@@ -159,10 +159,131 @@ def simplify(expression, variable):
     """
     _check_expression(expression, variable)
     expr_list = _simp_helper(_interp_expr(replace_var(expression, variable, "X"), "X"))
+    return _fix_out(expr_list, variable)
+
+
+def derivative(expression, variable):
+    """Takes the derivative of the expression.
+    Args:
+        expression (string): Original expression.
+        variable (string): Variable used in expression
+    Returns:
+        string: Derivative of expression.
+    Raises:
+        TypeError: expression not recognisable as algebraic expression or variable name equal to protected function
+    """
+    _check_expression(expression, variable)
+    expr_list = _der_helper(_interp_expr(replace_var(expression, variable, "X"), "X"))
+    return _fix_out(expr_list, variable)
+
+
+def _fix_out(expr_list, variable):
     out = ""
     for thing in expr_list:
-        out += str(thing)
+        if thing == "+" or thing == "-":
+            out += " " + thing + " "
+        else:
+            out += str(thing)
     return replace_var(out, "X", variable)
+
+
+def _der_helper(expression_list):
+    """A help function for derivation."""
+
+    def der_grouped(group):
+        if not var_in(group):
+            return [0]
+        if "+" not in group and "-" not in group:
+            return der_mult(group)
+        for index in range(0, len(group)):
+            item = group[index]
+            if item == "+" or item == "-":
+                if index > 0:
+                    return der_grouped(group[:index]) + [item] + der_grouped(group[index+1:])
+                else:
+                    return [item] + der_grouped(group[index+1:])
+
+    def der_mult(group):
+        if not var_in(group):
+            return [0]
+        if "*" not in group:
+            return der_div(group)
+        for index in range(0, len(group)):
+            if group[index] == "*":
+                return group[:index] + ["*"] + der_mult(group[index+1:]) + ["+"] + group[index+1:] +\
+                       ["*"] + der_div(group[:index])
+
+    def der_div(group):
+        if not var_in(group):
+            return [0]
+        if "/" not in group:
+            return der_exp(group)
+        for index in range(len(group)-1, 0, -1):
+            if group[index] == "/":
+                f, g = group[:index], group[index+1:]
+                return [der_div(f) + ["*"] + g + ["-"] + f + ["*"] + der_exp(g), "/"] + g + ["^", 2]
+
+    def der_exp(group):
+        if not var_in(group):
+            return [0]
+        if "^" not in group:
+            return der_op(group)
+        for index in range(0, len(group)):
+            if group[index] == "^":
+                base, exp = group[:index], group[index+1:]
+                if not var_in(exp):
+                    return exp + ["*"] + base + ["^", exp + ["-", 1]]
+                elif not var_in(base):
+                    return [["log", base], "*", der_par(exp)] + ["*"] + base + ["^"] + exp
+                else:
+                    return der_mult([["log", base], "*", exp]) + ["*"] + base + ["^"] + exp
+
+    def der_op(group):
+        if not var_in(group):
+            return [0]
+        if len(group) == 2 and isinstance(group[0], str) and group[0] in COMMON_OPERATORS:
+            op_der = _OPERATOR_DERIVATIVE[group[0]]
+            if isinstance(op_der, str):
+                return [[op_der, group[1]], "*", der_par([group[1]])]
+            else:
+                return [[x_replacer(op_der, group[1])], "*", der_par([group[1]])]
+        else:
+            return der_par(group)
+
+    def der_par(group):
+        if not var_in(group):
+            return [0]
+        if group == "X" or group == ["X"]:
+            return [1]
+        elif len(group) == 1 and isinstance(group[0], list):
+            return der_grouped(group[0])
+        else:
+            print(group)
+            raise SystemError
+
+    def var_in(group):
+        for item in group:
+            if isinstance(item, list) and var_in(item):
+                return True
+            elif item == "X":
+                return True
+        return False
+
+    def x_replacer(group, instead):
+        if not isinstance(group, list) or not var_in(group):
+            return group
+        for index in range(0, len(group)):
+            item = group[index]
+            if item == "X":
+                group[index] = instead
+            else:
+                group[index] = x_replacer(group[index], instead)
+        return group
+
+    grouped_list = _group(_basic_fix(expression_list))
+    der_group = der_grouped(grouped_list)
+    new_list, _ = _sort_and_ungroup(der_group)
+    return _simp_helper(new_list)
 
 
 def _simp_helper(expression_list, mem=None):
@@ -172,409 +293,409 @@ def _simp_helper(expression_list, mem=None):
         mem = []
     mem.append(expression_list.copy())
 
-    #  does basic simplifications
-    def basic_fix(list_to_fix):
-        prev_expr = []
-        while list_to_fix != prev_expr:
-            prev_expr = list_to_fix.copy()
-            prev_thing = "{"
-            par = {0: [""]}
-            par_ok = {0: False}
-            par_mult = {}
-            par_count = 0
-            for index in range(0, len(list_to_fix)):
-                thing = list_to_fix[index]
-                if index + 1 < len(list_to_fix):
-                    next_thing = list_to_fix[index + 1]
-                else:
-                    next_thing = "}"
-
-                if _is_int(thing):
-                    list_to_fix[index] = int(float(thing))
-                # Remove redundant expressions
-                if (isinstance(prev_thing, str))\
-                        and ((thing == 0 and prev_thing in "+-{(" and isinstance(next_thing, str) and next_thing in "+-")
-                             or (thing == 1 and prev_thing == "^") or (thing == 1 and prev_thing in "*/")):
-                    if index - 1 > 0:
-                        list_to_fix = list_to_fix[:index - 1] + list_to_fix[index + 1:]
-                    else:
-                        list_to_fix = list_to_fix[index + 1:]
-                    break
-                elif thing == "+" and (isinstance(prev_thing, str) and prev_thing in "*/^"):
-                    list_to_fix = list_to_fix[:index] + list_to_fix[index + 1:]
-                    break
-                elif thing == "-" and (isinstance(prev_thing, str) and prev_thing in "*/^"):
-                    list_to_fix = list_to_fix[:index] + [-float(next_thing)] + list_to_fix[index + 2:]
-                    break
-                elif prev_thing == "(" and next_thing == ")":
-                    if index-2 < 0 or not isinstance(list_to_fix[index-2], str) or (list_to_fix[index-2] not in
-                                                                                    COMMON_OPERATORS):
-                        if index - 1 > 0:
-                            list_to_fix = list_to_fix[:index-1] + [thing] + list_to_fix[index+1:]
-                        else:
-                            list_to_fix = [thing] + list_to_fix[index+1:]
-                        break
-                elif thing == "+" and (prev_thing == "{" or prev_thing == "("):
-                    if index > 0:
-                        list_to_fix = list_to_fix[:index] + list_to_fix[index+1:]
-                    else:
-                        list_to_fix = list_to_fix[index+1:]
-                    break
-
-                # does basic calculation
-                if not isinstance(thing, list):
-                    if thing == "/" and _is_int(prev_thing) and _is_int(next_thing):
-                        divisor = math.gcd(int(prev_thing), int(next_thing))
-                        if divisor not in [0, 1]:
-                            list_to_fix[index-1] = int(prev_thing)/divisor
-                            list_to_fix[index+1] = int(next_thing)/divisor
-                            break
-
-                # Remove redundant parenthesis
-                for outside in range(par_count - 1, 0, -1):
-                    if par_ok[outside]:
-                        par[outside].append(thing)
-                if thing == "(":
-                    par_count += 1
-                    if prev_thing == "+" or prev_thing == "{":
-                        par[par_count] = ["+"]
-                        par_ok[par_count] = True
-                    elif prev_thing == "-":
-                        par[par_count] = ["-"]
-                        par_ok[par_count] = False
-                    elif prev_thing == "*" and _is_float(list_to_fix[index-2])\
-                            and (index - 3 <= 0 or list_to_fix[index - 3] == "+" or list_to_fix[index-3] == "-"):
-                        par_mult[par_count] = list_to_fix[index - 2]
-                        if index-3 <= 0 or list_to_fix[index-3] == "+":
-                            par[par_count] = ["+"]
-                        else:
-                            par[par_count] = ["-"]
-                        par_ok[par_count] = True
-                    else:
-                        par_ok[par_count] = False
-                elif thing == ")":
-                    if par_ok[par_count] and (isinstance(next_thing, str) and next_thing in "+-}"):
-                        content = par[par_count]
-                        par_len = len(content)
-                        if content[1] == "+" or content[1] == "-":
-                            content = content[1:]
-                        to_mult = float(par_mult.setdefault(par_count, 1))
-                        if to_mult != 1:
-                            multiplied = []
-                            for item in content:
-                                if item == "+" or item == "-":
-                                    multiplied.extend([item, str(to_mult), "*"])
-                                else:
-                                    multiplied.append(item)
-                            content = multiplied
-                            par_len += 2
-                        if index - par_len -1 > 0:
-                            list_to_fix = list_to_fix[:index - par_len-1] + content.copy() + list_to_fix[index + 1:]
-                        else:
-                            list_to_fix = content.copy() + list_to_fix[index + 1:]
-                        break
-                    par_count -= 1
-                elif par_ok[par_count]:
-                    if par[par_count][0] == "-":
-                        if thing == "+":
-                            to_add = "-"
-                        elif thing == "-":
-                            to_add = "+"
-                        else:
-                            to_add = thing
-                    else:
-                        to_add = thing
-                    par[par_count].append(to_add)
-
-                prev_thing = thing
-        return list_to_fix
-
-    # groups similar object together in preferred order
-    def group(list_to_group):
-        first_level = []
-        is_first = True
-        is_op = False
-        op_inv = False
-        op = ""
-        second_level = []
-        par_count = 0
-        for item_index in range(0, len(list_to_group)):
-            item = list_to_group[item_index]
-            if isinstance(item, str) and item in COMMON_OPERATORS and not is_op and is_first:
-                is_op = True
-                op = item
-                if item in _OPERATOR_INVERSE.keys():
-                    if list_to_group[item_index + 1] == "(" and list_to_group[item_index + 2] == _OPERATOR_INVERSE[item]:
-                        op_inv = True
-            elif item == "(":
-                if not is_first:
-                    second_level.append(item)
-                par_count += 1
-                is_first = False
-            elif item == ")":
-                par_count -= 1
-                if op_inv and par_count == 1:
-                    if list_to_group[item_index + 1] != ")":
-                        op_inv = False
-                if par_count == 0:
-                    if is_op:
-                        is_op = False
-                        if op_inv:
-                            first_level.append(second_level[2:-1])
-                        elif second_level[0] == "(" and second_level[-1] == ")":
-                            first_level.append([op, group(second_level[1:-1])])
-                        else:
-                            first_level.append([op, group(second_level)])
-                    else:
-                        first_level.append(group(second_level))
-                    is_first = True
-                    second_level = []
-                else:
-                    second_level.append(item)
-            elif is_first:
-                first_level.append(item)
-            else:
-                second_level.append(item)
-        return first_level
-
-    def sort_and_ungroup(list_to_fix):
-        while len(list_to_fix) == 1 and isinstance(list_to_fix[0], list):
-            list_to_fix = list_to_fix[0]
-        res = []
-        list_to_fix, req_par = sort_group(list_to_fix.copy())
-        for item_index in range(0, len(list_to_fix)):
-            item = list_to_fix[item_index]
-            if isinstance(item, list):
-                nested_list, nest_par = sort_and_ungroup(item)
-                if (item_index + 1 < len(list_to_fix) and list_to_fix[item_index + 1] == "^") or\
-                        (item_index > 0 and isinstance(list_to_fix[item_index - 1], str)
-                         and list_to_fix[item_index - 1] in COMMON_OPERATORS):
-                    nest_par = True
-                if res[-1] == "^":
-                    nest_par = True
-                if nest_par:
-                    res.append("(")
-                for nested_item in nested_list:
-                    res.append(nested_item)
-                if nest_par:
-                    res.append(")")
-            else:
-                res.append(item)
-        return res, req_par
-
-    def sort_group(list_to_sort):
-        req_par = False
-        if len(list_to_sort) == 0 or isinstance(list_to_sort[0], str) and list_to_sort[0] in COMMON_OPERATORS:
-            return list_to_sort, req_par
-        types = dict()
-        cur = []
-        prev_sign = 1
-        if list_to_sort[0] == "-":
-            prev_sign = -1
-        for item_index in range(0, len(list_to_sort)+1):
-            if item_index < len(list_to_sort):
-                item = list_to_sort[item_index]
-            else:
-                item = "}"
-            if (item == "+" or item == "-" or item == "}") and\
-                    (len(cur) > 0 and (item_index - 1 >= 0 and list_to_sort[item_index - 1] != "(")):
-                fixed_part = fix_mult(cur)
-                if len(fixed_part) == 1:
-                    types["1"] = [[1], types.setdefault("1", [[1], 0])[1] + prev_sign * fixed_part[0]]
-                else:
-                    types[str(fixed_part[2:])] = [fixed_part[2:], types.setdefault(str(fixed_part[2:]), ["", 0])[1] +
-                                                  prev_sign * float(fixed_part[0])]
-                if item == "+":
-                    prev_sign = 1
-                elif item == "-":
-                    prev_sign = -1
-                cur = []
-            else:
-                cur.append(item)
-        res = []
-        keys = sorted(types.keys())
-        if len(keys) > 1:
-            req_par = True
-        for dic_key in keys:
-            if types[dic_key][1] == 0:
-                continue
-            elif types[dic_key][1] == 1:
-                res.extend(["+"] + types[dic_key][0])
-            elif types[dic_key][1] == -1:
-                res.extend(["-"] + types[dic_key][0])
-            elif types[dic_key][1] > 0:
-                res.extend(["+", types[dic_key][1], "*"] + types[dic_key][0])
-            elif types[dic_key][1] < 0:
-                res.extend(["-", -types[dic_key][1], "*"] + types[dic_key][0])
-        return res, req_par
-
-    def fix_mult(list_to_fix):
-        # Returns an expression without +- simplified with a leading coefficient (and perhaps *[...])
-        prev = "{"
-        const = 1
-        var_pow = 0
-        exp = []
-        par = []
-        exp_to_check = []
-        par_to_check = {}
-        for item_index in range(0, len(list_to_fix)):
-            item = list_to_fix[item_index]
-            if item_index + 1 == len(list_to_fix):
-                next_i = "}"
-            else:
-                next_i = list_to_fix[item_index + 1]
-            if (isinstance(item, str) and item in "*/^") or (isinstance(prev, str) and prev == "^"):
-                prev = item
-                continue
-            if prev == "*" or prev == "{":
-                sign = 1
-            elif prev == "/":
-                sign = -1
-            if item == "X":
-                if next_i == "^":
-                    x_pow = list_to_fix[item_index + 2]
-                    if x_pow == "X" or isinstance(x_pow, list):
-                        if sign == 1:
-                            if len(exp) > 0:
-                                exp.append("*")
-                        elif sign == -1:
-                            if len(exp) == 0:
-                                exp.append(1)
-                            exp.append("/")
-                        exp.extend(["X", "^", x_pow])
-                        prev = item
-                        continue
-                else:
-                    x_pow = 1
-                if isinstance(x_pow, int) or x_pow.isdigit():
-                    var_pow += sign * int(float(x_pow))
-                else:
-                    var_pow += sign * float(x_pow)
-            elif _is_float(item):
-                if next_i == "^":
-                    num_pow = list_to_fix[item_index + 2]
-                    if num_pow == "X":
-                        exp_to_check.append(item)
-                        prev = item
-                        continue
-                    elif isinstance(num_pow, list):
-                        if sign == 1:
-                            if len(exp) > 0:
-                                exp.append("*")
-                        elif sign == -1:
-                            if len(exp) == 0:
-                                exp.append(1)
-                            exp.append("/")
-                        exp.extend([item, "^", num_pow])
-                        prev = item
-                        continue
-                else:
-                    num_pow = 1
-                if sign == 1:
-                    const *= float(item) ** float(num_pow)
-                elif sign == -1:
-                    const /= float(item) ** float(num_pow)
-            elif isinstance(item, list) and prev != "^":
-
-                if next_i == "^" and not _is_float(list_to_fix[item_index + 2]):
-                    if sign == 1:
-                        if len(par) > 0:
-                            par.append("*")
-                    elif sign == -1:
-                        if len(par) == 0:
-                            par.append(1)
-                        par.append("/")
-                    if next_i == "^":
-                        par.extend([item, "^", list_to_fix[item_index + 2]])
-                else:
-                    if next_i == "^":
-                        extra = float(list_to_fix[item_index + 2])
-                    else:
-                        extra = 1
-                    par_to_check[str(item)] = [item, par_to_check.setdefault(str(item), [[], 0])[1] + sign * extra]
-            prev = item
-        par_keys = sorted(par_to_check.keys())
-        for dic_key in par_keys:
-            if par_to_check[dic_key][1] == 0:
-                continue
-            elif par_to_check[dic_key][1] == 1:
-                if len(par) > 0:
-                    par.append("*")
-                par.append(par_to_check[dic_key][0])
-            elif par_to_check[dic_key][1] == -1:
-                if len(par) == 0:
-                    par.append(1)
-                par.extend(["/"] + [par_to_check[dic_key][0]])
-            elif par_to_check[dic_key][1] > 0:
-                if len(par) > 0:
-                    par.append("*")
-                par.extend([par_to_check[dic_key][0]] + ["^"] + [str(par_to_check[dic_key][1])])
-            else:
-                if len(par) == 0:
-                    par.append(1)
-                par.extend(["/"] + [par_to_check[dic_key][0]] + ["^"] + [str(-par_to_check[dic_key][1])])
-
-
-        # simplifies exponents
-        prev_check = []
-        while prev_check != exp_to_check:
-            prev_check = exp_to_check.copy()
-            exp_to_check = sorted(exp_to_check)
-            for dig_index in range(0, len(exp_to_check) - 1):
-                cur_dig = exp_to_check[dig_index]
-                next_dig = exp_to_check[dig_index + 1]
-                if cur_dig == next_dig:
-                    if dig_index > 0:
-                        exp_to_check = exp_to_check[:dig_index] + exp_to_check[dig_index + 2:] + [str(float(cur_dig) *
-                                                                                                      float(next_dig))]
-                        break
-                    else:
-                        exp_to_check = exp_to_check[dig_index + 2:] + [str(float(cur_dig) * float(next_dig))]
-                        break
-        if len(exp_to_check) == 1:
-            if len(exp) == 0:
-                exp = [exp_to_check[0], "^", "X"]
-            else:
-                exp.extend(["*", exp_to_check[0], "^", "X"])
-        elif len(exp_to_check) > 1:
-            if len(exp) > 0:
-                exp.append("*")
-            for dig_index in range(0, len(exp_to_check)):
-                exp.extend([exp_to_check[dig_index], "^", "X"])
-                if dig_index < len(exp_to_check) - 1:
-                    exp.append("*")
-
-        if const == 0:
-            return [0]
-        if len(exp) == 0:
-            end = par
-        elif len(par) == 0:
-            end = exp
-        else:
-            end = exp + ["*"] + par
-        if var_pow != 0:
-            if len(end) > 0:
-                end = ["*"] + end
-            if not var_pow == 1:
-                end = ["^", var_pow] + end
-            end = ["X"] + end
-        if len(end) > 0:
-            return [const, "*"] + end
-        else:
-            return [const]
-
-    a =basic_fix(expression_list)
-    b = group(a)
-    c = sort_and_ungroup(b)
-    c
-    new_list, _ = sort_and_ungroup(group(basic_fix(expression_list)))
+    new_list, _ = _sort_and_ungroup(_group(_basic_fix(expression_list)))
     if len(new_list) == 0:
         return [0]
-    fixed_list = basic_fix(new_list)
+    fixed_list = _basic_fix(new_list)
     if fixed_list in mem:
         return fixed_list
     else:
         return _simp_helper(fixed_list, mem)
+
+
+def _basic_fix(list_to_fix):
+    """does basic simplifications"""
+    prev_expr = []
+    while list_to_fix != prev_expr:
+        prev_expr = list_to_fix.copy()
+        prev_thing = "{"
+        par = {0: [""]}
+        par_ok = {0: False}
+        par_mult = {}
+        par_count = 0
+        for index in range(0, len(list_to_fix)):
+            thing = list_to_fix[index]
+            if index + 1 < len(list_to_fix):
+                next_thing = list_to_fix[index + 1]
+            else:
+                next_thing = "}"
+
+            if _is_int(thing):
+                list_to_fix[index] = int(float(thing))
+            # Remove redundant expressions
+            if (isinstance(prev_thing, str))\
+                    and ((thing == 0 and prev_thing in "+-{(" and isinstance(next_thing, str) and next_thing in "+-")
+                         or (thing == 1 and prev_thing == "^") or (thing == 1 and prev_thing in "*/")):
+                if index - 1 > 0:
+                    list_to_fix = list_to_fix[:index - 1] + list_to_fix[index + 1:]
+                else:
+                    list_to_fix = list_to_fix[index + 1:]
+                break
+            elif thing == "+" and (isinstance(prev_thing, str) and prev_thing in "*/^"):
+                list_to_fix = list_to_fix[:index] + list_to_fix[index + 1:]
+                break
+            elif thing == "-" and (isinstance(prev_thing, str) and prev_thing in "*/^"):
+                list_to_fix = list_to_fix[:index] + [-float(next_thing)] + list_to_fix[index + 2:]
+                break
+            elif prev_thing == "(" and next_thing == ")":
+                if index-2 < 0 or not isinstance(list_to_fix[index-2], str) or (list_to_fix[index-2] not in
+                                                                                COMMON_OPERATORS):
+                    if index - 1 > 0:
+                        list_to_fix = list_to_fix[:index-1] + [thing] + list_to_fix[index+1:]
+                    else:
+                        list_to_fix = [thing] + list_to_fix[index+1:]
+                    break
+            elif thing == "+" and (prev_thing == "{" or prev_thing == "("):
+                if index > 0:
+                    list_to_fix = list_to_fix[:index] + list_to_fix[index+1:]
+                else:
+                    list_to_fix = list_to_fix[index+1:]
+                break
+
+            # does basic calculation
+            if not isinstance(thing, list):
+                if thing == "/" and _is_int(prev_thing) and _is_int(next_thing):
+                    divisor = math.gcd(int(prev_thing), int(next_thing))
+                    if divisor not in [0, 1]:
+                        list_to_fix[index-1] = int(prev_thing)/divisor
+                        list_to_fix[index+1] = int(next_thing)/divisor
+                        break
+
+            # Remove redundant parenthesis
+            for outside in range(par_count - 1, 0, -1):
+                if par_ok[outside]:
+                    par[outside].append(thing)
+            if thing == "(":
+                par_count += 1
+                if prev_thing == "+" or prev_thing == "{":
+                    par[par_count] = ["+"]
+                    par_ok[par_count] = True
+                elif prev_thing == "-":
+                    par[par_count] = ["-"]
+                    par_ok[par_count] = False
+                elif prev_thing == "*" and _is_float(list_to_fix[index-2])\
+                        and (index - 3 <= 0 or list_to_fix[index - 3] == "+" or list_to_fix[index-3] == "-"):
+                    par_mult[par_count] = list_to_fix[index - 2]
+                    if index-3 <= 0 or list_to_fix[index-3] == "+":
+                        par[par_count] = ["+"]
+                    else:
+                        par[par_count] = ["-"]
+                    par_ok[par_count] = True
+                else:
+                    par_ok[par_count] = False
+            elif thing == ")":
+                if par_ok[par_count] and (isinstance(next_thing, str) and next_thing in "+-}"):
+                    content = par[par_count]
+                    par_len = len(content)
+                    if content[1] == "+" or content[1] == "-":
+                        content = content[1:]
+                    to_mult = float(par_mult.setdefault(par_count, 1))
+                    if to_mult != 1:
+                        multiplied = []
+                        for item in content:
+                            if item == "+" or item == "-":
+                                multiplied.extend([item, str(to_mult), "*"])
+                            else:
+                                multiplied.append(item)
+                        content = multiplied
+                        par_len += 2
+                    if index - par_len -1 > 0:
+                        list_to_fix = list_to_fix[:index - par_len-1] + content.copy() + list_to_fix[index + 1:]
+                    else:
+                        list_to_fix = content.copy() + list_to_fix[index + 1:]
+                    break
+                par_count -= 1
+            elif par_ok[par_count]:
+                if par[par_count][0] == "-":
+                    if thing == "+":
+                        to_add = "-"
+                    elif thing == "-":
+                        to_add = "+"
+                    else:
+                        to_add = thing
+                else:
+                    to_add = thing
+                par[par_count].append(to_add)
+
+            prev_thing = thing
+    return list_to_fix
+
+
+def _group(list_to_group):
+    """groups similar object together in preferred order"""
+    first_level = []
+    is_first = True
+    is_op = False
+    op_inv = False
+    op = ""
+    second_level = []
+    par_count = 0
+    for item_index in range(0, len(list_to_group)):
+        item = list_to_group[item_index]
+        if isinstance(item, str) and item in COMMON_OPERATORS and not is_op and is_first:
+            is_op = True
+            op = item
+            if item in _OPERATOR_INVERSE.keys():
+                if list_to_group[item_index + 1] == "(" and list_to_group[item_index + 2] == _OPERATOR_INVERSE[item]:
+                    op_inv = True
+        elif item == "(":
+            if not is_first:
+                second_level.append(item)
+            par_count += 1
+            is_first = False
+        elif item == ")":
+            par_count -= 1
+            if op_inv and par_count == 1:
+                if list_to_group[item_index + 1] != ")":
+                    op_inv = False
+            if par_count == 0:
+                if is_op:
+                    is_op = False
+                    if op_inv:
+                        first_level.append(second_level[2:-1])
+                    elif second_level[0] == "(" and second_level[-1] == ")":
+                        first_level.append([op, _group(second_level[1:-1])])
+                    else:
+                        first_level.append([op, _group(second_level)])
+                else:
+                    first_level.append(_group(second_level))
+                is_first = True
+                second_level = []
+            else:
+                second_level.append(item)
+        elif is_first:
+            first_level.append(item)
+        else:
+            second_level.append(item)
+    return first_level
+
+
+def _sort_and_ungroup(list_to_fix):
+    while len(list_to_fix) == 1 and isinstance(list_to_fix[0], list):
+        list_to_fix = list_to_fix[0]
+    res = []
+    list_to_fix, req_par = _sort_group(list_to_fix.copy())
+    for item_index in range(0, len(list_to_fix)):
+        item = list_to_fix[item_index]
+        if isinstance(item, list):
+            nested_list, nest_par = _sort_and_ungroup(item)
+            if (item_index + 1 < len(list_to_fix) and list_to_fix[item_index + 1] == "^") or\
+                    (item_index > 0 and isinstance(list_to_fix[item_index - 1], str)
+                     and list_to_fix[item_index - 1] in COMMON_OPERATORS):
+                nest_par = True
+            if res[-1] == "^":
+                nest_par = True
+            if nest_par:
+                res.append("(")
+            for nested_item in nested_list:
+                res.append(nested_item)
+            if nest_par:
+                res.append(")")
+        else:
+            res.append(item)
+    return res, req_par
+
+
+def _sort_group(list_to_sort):
+    req_par = False
+    if len(list_to_sort) == 0 or isinstance(list_to_sort[0], str) and list_to_sort[0] in COMMON_OPERATORS:
+        return list_to_sort, req_par
+    types = dict()
+    cur = []
+    prev_sign = 1
+    if list_to_sort[0] == "-":
+        prev_sign = -1
+    for item_index in range(0, len(list_to_sort)+1):
+        if item_index < len(list_to_sort):
+            item = list_to_sort[item_index]
+        else:
+            item = "}"
+        if (item == "+" or item == "-" or item == "}") and\
+                (len(cur) > 0 and (item_index - 1 >= 0 and list_to_sort[item_index - 1] != "(")):
+            fixed_part = _fix_mult(cur)
+            if len(fixed_part) == 1:
+                types["1"] = [[1], types.setdefault("1", [[1], 0])[1] + prev_sign * fixed_part[0]]
+            else:
+                types[str(fixed_part[2:])] = [fixed_part[2:], types.setdefault(str(fixed_part[2:]), ["", 0])[1] +
+                                              prev_sign * float(fixed_part[0])]
+            if item == "+":
+                prev_sign = 1
+            elif item == "-":
+                prev_sign = -1
+            cur = []
+        else:
+            cur.append(item)
+    res = []
+    keys = sorted(types.keys())
+    if len(keys) > 1:
+        req_par = True
+    for dic_key in keys:
+        if types[dic_key][1] == 0:
+            continue
+        elif types[dic_key][1] == 1:
+            res.extend(["+"] + types[dic_key][0])
+        elif types[dic_key][1] == -1:
+            res.extend(["-"] + types[dic_key][0])
+        elif types[dic_key][1] > 0:
+            res.extend(["+", types[dic_key][1], "*"] + types[dic_key][0])
+        elif types[dic_key][1] < 0:
+            res.extend(["-", -types[dic_key][1], "*"] + types[dic_key][0])
+    return res, req_par
+
+
+def _fix_mult(list_to_fix):
+    """Returns an expression without +- simplified with a leading coefficient (and perhaps *[...])"""
+    prev = "{"
+    const = 1
+    var_pow = 0
+    exp = []
+    par = []
+    exp_to_check = []
+    par_to_check = {}
+    for item_index in range(0, len(list_to_fix)):
+        item = list_to_fix[item_index]
+        if item_index + 1 == len(list_to_fix):
+            next_i = "}"
+        else:
+            next_i = list_to_fix[item_index + 1]
+        if (isinstance(item, str) and item in "*/^") or (isinstance(prev, str) and prev == "^"):
+            prev = item
+            continue
+        if prev == "*" or prev == "{":
+            sign = 1
+        elif prev == "/":
+            sign = -1
+        if item == "X":
+            if next_i == "^":
+                x_pow = list_to_fix[item_index + 2]
+                if x_pow == "X" or isinstance(x_pow, list):
+                    if sign == 1:
+                        if len(exp) > 0:
+                            exp.append("*")
+                    elif sign == -1:
+                        if len(exp) == 0:
+                            exp.append(1)
+                        exp.append("/")
+                    exp.extend(["X", "^", x_pow])
+                    prev = item
+                    continue
+            else:
+                x_pow = 1
+            if isinstance(x_pow, int) or x_pow.isdigit():
+                var_pow += sign * int(float(x_pow))
+            else:
+                var_pow += sign * float(x_pow)
+        elif _is_float(item):
+            if next_i == "^":
+                num_pow = list_to_fix[item_index + 2]
+                if num_pow == "X":
+                    exp_to_check.append(item)
+                    prev = item
+                    continue
+                elif isinstance(num_pow, list):
+                    if sign == 1:
+                        if len(exp) > 0:
+                            exp.append("*")
+                    elif sign == -1:
+                        if len(exp) == 0:
+                            exp.append(1)
+                        exp.append("/")
+                    exp.extend([item, "^", num_pow])
+                    prev = item
+                    continue
+            else:
+                num_pow = 1
+            if sign == 1:
+                const *= float(item) ** float(num_pow)
+            elif sign == -1:
+                const /= float(item) ** float(num_pow)
+        elif isinstance(item, list) and prev != "^":
+
+            if next_i == "^" and not _is_float(list_to_fix[item_index + 2]):
+                if sign == 1:
+                    if len(par) > 0:
+                        par.append("*")
+                elif sign == -1:
+                    if len(par) == 0:
+                        par.append(1)
+                    par.append("/")
+                if next_i == "^":
+                    par.extend([item, "^", list_to_fix[item_index + 2]])
+            else:
+                if next_i == "^":
+                    extra = float(list_to_fix[item_index + 2])
+                else:
+                    extra = 1
+                par_to_check[str(item)] = [item, par_to_check.setdefault(str(item), [[], 0])[1] + sign * extra]
+        prev = item
+    par_keys = sorted(par_to_check.keys())
+    for dic_key in par_keys:
+        if par_to_check[dic_key][1] == 0:
+            continue
+        elif par_to_check[dic_key][1] == 1:
+            if len(par) > 0:
+                par.append("*")
+            par.append(par_to_check[dic_key][0])
+        elif par_to_check[dic_key][1] == -1:
+            if len(par) == 0:
+                par.append(1)
+            par.extend(["/"] + [par_to_check[dic_key][0]])
+        elif par_to_check[dic_key][1] > 0:
+            if len(par) > 0:
+                par.append("*")
+            par.extend([par_to_check[dic_key][0]] + ["^"] + [str(par_to_check[dic_key][1])])
+        else:
+            if len(par) == 0:
+                par.append(1)
+            par.extend(["/"] + [par_to_check[dic_key][0]] + ["^"] + [str(-par_to_check[dic_key][1])])
+
+    # simplifies exponents
+    prev_check = []
+    while prev_check != exp_to_check:
+        prev_check = exp_to_check.copy()
+        exp_to_check = sorted(exp_to_check)
+        for dig_index in range(0, len(exp_to_check) - 1):
+            cur_dig = exp_to_check[dig_index]
+            next_dig = exp_to_check[dig_index + 1]
+            if cur_dig == next_dig:
+                if dig_index > 0:
+                    exp_to_check = exp_to_check[:dig_index] + exp_to_check[dig_index + 2:] + [str(float(cur_dig) *
+                                                                                                  float(next_dig))]
+                    break
+                else:
+                    exp_to_check = exp_to_check[dig_index + 2:] + [str(float(cur_dig) * float(next_dig))]
+                    break
+    if len(exp_to_check) == 1:
+        if len(exp) == 0:
+            exp = [exp_to_check[0], "^", "X"]
+        else:
+            exp.extend(["*", exp_to_check[0], "^", "X"])
+    elif len(exp_to_check) > 1:
+        if len(exp) > 0:
+            exp.append("*")
+        for dig_index in range(0, len(exp_to_check)):
+            exp.extend([exp_to_check[dig_index], "^", "X"])
+            if dig_index < len(exp_to_check) - 1:
+                exp.append("*")
+
+    if const == 0:
+        return [0]
+    if len(exp) == 0:
+        end = par
+    elif len(par) == 0:
+        end = exp
+    else:
+        end = exp + ["*"] + par
+    if var_pow != 0:
+        if len(end) > 0:
+            end = ["*"] + end
+        if not var_pow == 1:
+            end = ["^", var_pow] + end
+        end = ["X"] + end
+    if len(end) > 0:
+        return [const, "*"] + end
+    else:
+        return [const]
 
 
 def _is_int(string):
@@ -784,5 +905,5 @@ def _check_expression(expr, variable):
 
 
 
-f = Function("10^x4", "x")
-print(f.simplify())
+f = Function("x^sinx", "x")
+print(derivative("exp(log(x)+1)", "x"))
