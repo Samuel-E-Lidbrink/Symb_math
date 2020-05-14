@@ -179,11 +179,13 @@ def derivative(expression, variable):
 
 def _fix_out(expr_list, variable):
     out = ""
+    prev = "{"
     for thing in expr_list:
-        if thing == "+" or thing == "-":
+        if (thing == "+" or thing == "-") and prev != "{" and prev != "(":
             out += " " + thing + " "
         else:
             out += str(thing)
+        prev = thing
     return replace_var(out, "X", variable)
 
 
@@ -903,5 +905,4 @@ def _check_expression(expr, variable):
         raise TypeError("Invalid ending operator in expression " + expr)
     if not len(parenthesis_list) == 0:
         raise TypeError("Missing " + str(len(parenthesis_list)) + " ending parenthesis" + " in expression " + expr)
-
 
