@@ -3,7 +3,9 @@
 
 This module is a simple library of tools to make symbolic computations and basic operations on algebraic functions.
 
-
+Symbolic calculation is a valuable tool in math. This library enables you to create mathematical functions in one
+variable and do basic computations with them, like simplifying, evaluating, taking the derivative and evaluating finite
+integrals.
 
 Example:
     Example usage:
