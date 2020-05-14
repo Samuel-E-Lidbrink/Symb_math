@@ -336,7 +336,6 @@ def _simp_helper(expression_list, mem=None):
     if mem is None:
         mem = []
     mem.append(expression_list.copy())
-
     new_list, _ = _sort_and_ungroup(_group(_basic_fix(expression_list)))
     if len(new_list) == 0:
         return [0]
@@ -406,27 +405,30 @@ def _basic_fix(list_to_fix):
                         break
 
             # Remove redundant parenthesis
-            for outside in range(par_count - 1, 0, -1):
-                if par_ok[outside]:
+            for outside in range(par_count, 0, -1):
+                if par_ok[outside] and (outside != par_count or thing == "("):
                     par[outside].append(thing)
             if thing == "(":
+                #if par_ok[par_count]:
+                 #   par[par_count].append("(")
                 par_count += 1
                 if prev_thing == "+" or prev_thing == "{":
-                    par[par_count] = ["+"]
+                    par[par_count] = par.setdefault(par_count, []) + ["+"]
                     par_ok[par_count] = True
                 elif prev_thing == "-":
-                    par[par_count] = ["-"]
+                    par[par_count] = par.setdefault(par_count, []) + ["-"]
                     par_ok[par_count] = False
                 elif prev_thing == "*" and _is_float(list_to_fix[index-2])\
                         and (index - 3 <= 0 or list_to_fix[index - 3] == "+" or list_to_fix[index-3] == "-"):
                     par_mult[par_count] = list_to_fix[index - 2]
                     if index-3 <= 0 or list_to_fix[index-3] == "+":
-                        par[par_count] = ["+"]
+                        par[par_count] = par.setdefault(par_count, []) + ["+"]
                     else:
-                        par[par_count] = ["-"]
+                        par[par_count] = par.setdefault(par_count, []) + ["-"]
                     par_ok[par_count] = True
                 else:
                     par_ok[par_count] = False
+
             elif thing == ")":
                 if par_ok[par_count] and (isinstance(next_thing, str) and next_thing in "+-}"):
                     content = par[par_count]
@@ -436,8 +438,13 @@ def _basic_fix(list_to_fix):
                     to_mult = float(par_mult.setdefault(par_count, 1))
                     if to_mult != 1:
                         multiplied = []
+                        in_par = 0
                         for item in content:
-                            if item == "+" or item == "-":
+                            if item == "(":
+                                in_par += 1
+                            elif item == ")":
+                                in_par -= 1
+                            if (item == "+" or item == "-") and in_par == 0:
                                 multiplied.extend([item, str(to_mult), "*"])
                             else:
                                 multiplied.append(item)
@@ -449,7 +456,7 @@ def _basic_fix(list_to_fix):
                         list_to_fix = content.copy() + list_to_fix[index + 1:]
                     break
                 par_count -= 1
-            elif par_ok[par_count]:
+            elif par_count > 0 and par_ok[par_count]:
                 if par[par_count][0] == "-":
                     if thing == "+":
                         to_add = "-"
@@ -497,6 +504,7 @@ def _group(list_to_group):
                     is_op = False
                     if op_inv:
                         first_level.append(second_level[2:-1])
+                        op_inv = False
                     elif second_level[0] == "(" and second_level[-1] == ")":
                         first_level.append([op, _group(second_level[1:-1])])
                     else:
@@ -907,4 +915,5 @@ def _check_expression(expr, variable):
         raise TypeError("Invalid ending operator in expression " + expr)
     if not len(parenthesis_list) == 0:
         raise TypeError("Missing " + str(len(parenthesis_list)) + " ending parenthesis" + " in expression " + expr)
+
 
