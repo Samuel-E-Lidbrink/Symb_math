@@ -1,4 +1,4 @@
-﻿# symb_math
+﻿# symbol_math
 ### A library for symbolic math calculations 
 This library provides you with the tools to create mathematical functions in one variable and do basic computations with them, like simplifying, evaluating, taking the derivative and evaluating finite integrals.
 
