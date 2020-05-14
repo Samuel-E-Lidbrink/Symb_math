@@ -22,6 +22,9 @@
 <section id="section-intro">
 <p>A symbolic math API.</p>
 <p>This module is a simple library of tools to make symbolic computations and basic operations on algebraic functions.</p>
+<p>Symbolic calculation is a valuable tool in math. This library enables you to create mathematical functions in one
+variable and do basic computations with them, like simplifying, evaluating, taking the derivative and evaluating finite
+integrals.</p>
 <h2 id="example">Example</h2>
 <p>Example usage:</p>
 <pre><code>&gt;&gt;&gt; import symbol_math
@@ -49,7 +52,9 @@ y^2 + 4*y + exp(y)
 
 This module is a simple library of tools to make symbolic computations and basic operations on algebraic functions.
 
-
+Symbolic calculation is a valuable tool in math. This library enables you to create mathematical functions in one
+variable and do basic computations with them, like simplifying, evaluating, taking the derivative and evaluating finite
+integrals.
 
 Example:
     Example usage:
@@ -223,6 +228,47 @@ def derivative(expression, variable):
     return _fix_out(expr_list, variable)
 
 
+def evaluate(expression, variable, value):
+    &#34;&#34;&#34;Evaluates the expression with given variable at value.
+    Args:
+        expression (string): The expression that should be simplified.
+        variable (string): Used variable in expression
+        value (float, int): Value where function should be evaluated
+    Returns:
+        float: evaluation of function.
+    Raises:
+        TypeError: expression not recognisable as algebraic expression or variable name equal to protected function&#34;&#34;&#34;
+    if not isinstance(value, (float, int)):
+        raise TypeError(&#34;Input value must be float or int&#34;)
+    _check_expression(expression, variable)
+    interp = _interp_expr(expression, variable, value)
+    for index in range(0, len(interp)):
+        thing = str(interp[index])
+        if thing == &#34;^&#34;:
+            interp[index] = &#34;**&#34;
+        elif thing in COMMON_OPERATORS:
+            interp[index] = &#34;math.&#34; + thing
+        else:
+            interp[index] = thing
+    try:
+        return float(eval(&#34;&#34;.join(interp)))
+    except ZeroDivisionError:
+        raise ZeroDivisionError(&#34;float division by zero for expression: &#34; + expression + &#34; at &#34; + variable + &#34; = &#34; +
+                                str(value))
+
+
+def replace_var(expression, old_var, new_var):
+    &#34;&#34;&#34;Replaces old variable in expression with a new one, without changing built in functions.
+    Args:
+        expression (string): The expression that should be simplified.
+        old_var (string): Old variable in expression
+        new_var (string): New variable to be used
+    Returns:
+        string: updated expression
+    &#34;&#34;&#34;
+    return _replace_helper(expression, old_var, new_var, 0)
+
+
 def _fix_out(expr_list, variable):
     out = &#34;&#34;
     prev = &#34;{&#34;
@@ -339,7 +385,6 @@ def _simp_helper(expression_list, mem=None):
     if mem is None:
         mem = []
     mem.append(expression_list.copy())
-
     new_list, _ = _sort_and_ungroup(_group(_basic_fix(expression_list)))
     if len(new_list) == 0:
         return [0]
@@ -382,7 +427,11 @@ def _basic_fix(list_to_fix):
                 list_to_fix = list_to_fix[:index] + list_to_fix[index + 1:]
                 break
             elif thing == &#34;-&#34; and (isinstance(prev_thing, str) and prev_thing in &#34;*/^&#34;):
-                list_to_fix = list_to_fix[:index] + [-float(next_thing)] + list_to_fix[index + 2:]
+                if _is_float(next_thing):
+                    list_to_fix = list_to_fix[:index] + [-float(next_thing)] + list_to_fix[index + 2:]
+                else:
+                    list_to_fix = list_to_fix[:index] + [&#34;-&#34;, next_thing] + list_to_fix[index + 2:]
+
                 break
             elif prev_thing == &#34;(&#34; and next_thing == &#34;)&#34;:
                 if index-2 &lt; 0 or not isinstance(list_to_fix[index-2], str) or (list_to_fix[index-2] not in
@@ -409,27 +458,30 @@ def _basic_fix(list_to_fix):
                         break
 
             # Remove redundant parenthesis
-            for outside in range(par_count - 1, 0, -1):
-                if par_ok[outside]:
+            for outside in range(par_count, 0, -1):
+                if par_ok[outside] and (outside != par_count or thing == &#34;(&#34;):
                     par[outside].append(thing)
             if thing == &#34;(&#34;:
+                #if par_ok[par_count]:
+                 #   par[par_count].append(&#34;(&#34;)
                 par_count += 1
                 if prev_thing == &#34;+&#34; or prev_thing == &#34;{&#34;:
-                    par[par_count] = [&#34;+&#34;]
+                    par[par_count] = par.setdefault(par_count, []) + [&#34;+&#34;]
                     par_ok[par_count] = True
                 elif prev_thing == &#34;-&#34;:
-                    par[par_count] = [&#34;-&#34;]
+                    par[par_count] = par.setdefault(par_count, []) + [&#34;-&#34;]
                     par_ok[par_count] = False
                 elif prev_thing == &#34;*&#34; and _is_float(list_to_fix[index-2])\
                         and (index - 3 &lt;= 0 or list_to_fix[index - 3] == &#34;+&#34; or list_to_fix[index-3] == &#34;-&#34;):
                     par_mult[par_count] = list_to_fix[index - 2]
                     if index-3 &lt;= 0 or list_to_fix[index-3] == &#34;+&#34;:
-                        par[par_count] = [&#34;+&#34;]
+                        par[par_count] = par.setdefault(par_count, []) + [&#34;+&#34;]
                     else:
-                        par[par_count] = [&#34;-&#34;]
+                        par[par_count] = par.setdefault(par_count, []) + [&#34;-&#34;]
                     par_ok[par_count] = True
                 else:
                     par_ok[par_count] = False
+
             elif thing == &#34;)&#34;:
                 if par_ok[par_count] and (isinstance(next_thing, str) and next_thing in &#34;+-}&#34;):
                     content = par[par_count]
@@ -439,8 +491,13 @@ def _basic_fix(list_to_fix):
                     to_mult = float(par_mult.setdefault(par_count, 1))
                     if to_mult != 1:
                         multiplied = []
+                        in_par = 0
                         for item in content:
-                            if item == &#34;+&#34; or item == &#34;-&#34;:
+                            if item == &#34;(&#34;:
+                                in_par += 1
+                            elif item == &#34;)&#34;:
+                                in_par -= 1
+                            if (item == &#34;+&#34; or item == &#34;-&#34;) and in_par == 0:
                                 multiplied.extend([item, str(to_mult), &#34;*&#34;])
                             else:
                                 multiplied.append(item)
@@ -452,7 +509,7 @@ def _basic_fix(list_to_fix):
                         list_to_fix = content.copy() + list_to_fix[index + 1:]
                     break
                 par_count -= 1
-            elif par_ok[par_count]:
+            elif par_count &gt; 0 and par_ok[par_count]:
                 if par[par_count][0] == &#34;-&#34;:
                     if thing == &#34;+&#34;:
                         to_add = &#34;-&#34;
@@ -499,7 +556,8 @@ def _group(list_to_group):
                 if is_op:
                     is_op = False
                     if op_inv:
-                        first_level.append(second_level[2:-1])
+                        first_level.append(_group(second_level[2:-1]))
+                        op_inv = False
                     elif second_level[0] == &#34;(&#34; and second_level[-1] == &#34;)&#34;:
                         first_level.append([op, _group(second_level[1:-1])])
                     else:
@@ -770,18 +828,6 @@ def _is_float(string):
         return False
 
 
-def replace_var(expression, old_var, new_var):
-    &#34;&#34;&#34;Replaces old variable in expression with a new one, without changing built in functions.
-    Args:
-        expression (string): The expression that should be simplified.
-        old_var (string): Old variable in expression
-        new_var (string): New variable to be used
-    Returns:
-        string: updated expression
-    &#34;&#34;&#34;
-    return _replace_helper(expression, old_var, new_var, 0)
-
-
 def _replace_helper(expression, old_var, new_var, index):
     &#34;&#34;&#34;Help function for replace_var.&#34;&#34;&#34;
     if index == len(COMMON_OPERATORS):
@@ -852,35 +898,6 @@ def _interp_expr(expression, variable, value=None):
         interp_expr.append(&#34;)&#34;)
         add_par -= 1
     return interp_expr
-
-
-def evaluate(expression, variable, value):
-    &#34;&#34;&#34;Evaluates the expression with given variable at value.
-    Args:
-        expression (string): The expression that should be simplified.
-        variable (string): Used variable in expression
-        value (float, int): Value where function should be evaluated
-    Returns:
-        float: evaluation of function.
-    Raises:
-        TypeError: expression not recognisable as algebraic expression or variable name equal to protected function&#34;&#34;&#34;
-    if not isinstance(value, (float, int)):
-        raise TypeError(&#34;Input value must be float or int&#34;)
-    _check_expression(expression, variable)
-    interp = _interp_expr(expression, variable, value)
-    for index in range(0, len(interp)):
-        thing = str(interp[index])
-        if thing == &#34;^&#34;:
-            interp[index] = &#34;**&#34;
-        elif thing in COMMON_OPERATORS:
-            interp[index] = &#34;math.&#34; + thing
-        else:
-            interp[index] = thing
-    try:
-        return float(eval(&#34;&#34;.join(interp)))
-    except ZeroDivisionError:
-        raise ZeroDivisionError(&#34;float division by zero for expression: &#34; + expression + &#34; at &#34; + variable + &#34; = &#34; +
-                                str(value))
 
 
 def _check_expression(expr, variable):
