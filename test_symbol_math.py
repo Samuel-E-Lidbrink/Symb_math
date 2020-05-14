@@ -57,7 +57,7 @@ class TestDerivative(unittest.TestCase):
             self.assertEqual(result, symbol_math.derivative(expr, "x"))
 
     def test_mult(self):
-        for [expr, result] in [["x*x", "2*x"], ["(x^2-3)*(1-x)", "-1 + 2*x"], ["x^10/(x+3*x*(x-1))", "10*x^9"]]:
+        for [expr, result] in [["x*x", "2*x"], ["(x^2-3)*(1-x)", "-1 + 2*x"], ["x^10/(x+3*x*(x-1))", "-x^10 + 10*x^9 + 3*x"]]:
             self.assertEqual(result, symbol_math.derivative(expr, "x"))
 
     def test_parenthesis(self):
@@ -67,18 +67,24 @@ class TestDerivative(unittest.TestCase):
 
     def test_operators(self):
         for [expr, result] in [["sinxcosx+cosxsinx", "2*cos(x)*sin(x)"],
-                               ["log(exp((10+x)^2))/(sin(asin(11-1+x)))-10(sinx-sinxcosh(acosh(x))/x)-10", "x"],
-                               ["(1-x(1-2))/(1+x)", "1"]]:
+                               ["log(exp((10+x)^2))/(sin(asin(11-1+x)))-10(sinx-sinxcosh(acosh(x))/x)-10", "x"]]:
             self.assertEqual(result, symbol_math.simplify(expr, "x"))
 
 
 
 class TestEvaluate(unittest.TestCase):
-    pass
+    def test_eval(self):
+        for [expr, result, val] in [["sinxcosx", 0.4564726253638138, 10],
+                               ["10x2", 90, 3]]:
+            self.assertEqual(result, symbol_math.evaluate(expr, "x", val))
 
 
 class TestReplaceVar(unittest.TestCase):
-    pass
+    def test_rep(self):
+        for [expr, result, new] in [["sinxcosx", "sinycosy", "y"],
+                               ["10x2-x", "10y2-y", "y"]]:
+            self.assertEqual(result, symbol_math.replace_var(expr, "x", new))
+
 
 
 if __name__ == '__main__':
