@@ -179,6 +179,47 @@ def derivative(expression, variable):
     return _fix_out(expr_list, variable)
 
 
+def evaluate(expression, variable, value):
+    """Evaluates the expression with given variable at value.
+    Args:
+        expression (string): The expression that should be simplified.
+        variable (string): Used variable in expression
+        value (float, int): Value where function should be evaluated
+    Returns:
+        float: evaluation of function.
+    Raises:
+        TypeError: expression not recognisable as algebraic expression or variable name equal to protected function"""
+    if not isinstance(value, (float, int)):
+        raise TypeError("Input value must be float or int")
+    _check_expression(expression, variable)
+    interp = _interp_expr(expression, variable, value)
+    for index in range(0, len(interp)):
+        thing = str(interp[index])
+        if thing == "^":
+            interp[index] = "**"
+        elif thing in COMMON_OPERATORS:
+            interp[index] = "math." + thing
+        else:
+            interp[index] = thing
+    try:
+        return float(eval("".join(interp)))
+    except ZeroDivisionError:
+        raise ZeroDivisionError("float division by zero for expression: " + expression + " at " + variable + " = " +
+                                str(value))
+
+
+def replace_var(expression, old_var, new_var):
+    """Replaces old variable in expression with a new one, without changing built in functions.
+    Args:
+        expression (string): The expression that should be simplified.
+        old_var (string): Old variable in expression
+        new_var (string): New variable to be used
+    Returns:
+        string: updated expression
+    """
+    return _replace_helper(expression, old_var, new_var, 0)
+
+
 def _fix_out(expr_list, variable):
     out = ""
     prev = "{"
@@ -726,18 +767,6 @@ def _is_float(string):
         return False
 
 
-def replace_var(expression, old_var, new_var):
-    """Replaces old variable in expression with a new one, without changing built in functions.
-    Args:
-        expression (string): The expression that should be simplified.
-        old_var (string): Old variable in expression
-        new_var (string): New variable to be used
-    Returns:
-        string: updated expression
-    """
-    return _replace_helper(expression, old_var, new_var, 0)
-
-
 def _replace_helper(expression, old_var, new_var, index):
     """Help function for replace_var."""
     if index == len(COMMON_OPERATORS):
@@ -808,35 +837,6 @@ def _interp_expr(expression, variable, value=None):
         interp_expr.append(")")
         add_par -= 1
     return interp_expr
-
-
-def evaluate(expression, variable, value):
-    """Evaluates the expression with given variable at value.
-    Args:
-        expression (string): The expression that should be simplified.
-        variable (string): Used variable in expression
-        value (float, int): Value where function should be evaluated
-    Returns:
-        float: evaluation of function.
-    Raises:
-        TypeError: expression not recognisable as algebraic expression or variable name equal to protected function"""
-    if not isinstance(value, (float, int)):
-        raise TypeError("Input value must be float or int")
-    _check_expression(expression, variable)
-    interp = _interp_expr(expression, variable, value)
-    for index in range(0, len(interp)):
-        thing = str(interp[index])
-        if thing == "^":
-            interp[index] = "**"
-        elif thing in COMMON_OPERATORS:
-            interp[index] = "math." + thing
-        else:
-            interp[index] = thing
-    try:
-        return float(eval("".join(interp)))
-    except ZeroDivisionError:
-        raise ZeroDivisionError("float division by zero for expression: " + expression + " at " + variable + " = " +
-                                str(value))
 
 
 def _check_expression(expr, variable):
