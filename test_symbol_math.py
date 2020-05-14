@@ -33,22 +33,22 @@ class TestFunction(unittest.TestCase):
 class TestSimplify(unittest.TestCase):
     def test_binary(self):
         for [expr, result] in [["1+2", "3"], ["x+7", "7 + x"], ["5x-2+4x-7x2", "-2 - 7*x^2 + 9*x"]]:
-            self.assertEqual(symbol_math.simplify(expr, "x"), result)
+            self.assertEqual(result, symbol_math.simplify(expr, "x"))
 
     def test_arithmetic(self):
         for [expr, result] in [["1*0+3*2-6", "0"], ["1/3x2", "0.3333333333333333*x^2"], ["7*4+23-2", "49"]]:
-            self.assertEqual(symbol_math.simplify(expr, "x"), result)
+            self.assertEqual(result, symbol_math.simplify(expr, "x"))
 
     def test_parenthesis(self):
         for [expr, result] in [["2-x+3(x+1)", "5 + 2*x"], ["(x-1)*3*(x-1)/(3)", "(-1 + x)^2"],
                                ["((3-7x2)/(1+x)^3*(1+x)*2-7^(3x-4+2*2))^2", "(2/(1 + x)^2*(3 - 7*x^2) - 7^(3*x))^2"]]:
-            self.assertEqual(symbol_math.simplify(expr, "x"), result)
+            self.assertEqual(result, symbol_math.simplify(expr, "x"))
 
     def test_operators(self):
         for [expr, result] in [["sinxcosx+cosxsinx", "2*cos(x)*sin(x)"],
-                               ["log(exp((10+x)^2))/(sin(asin(1-11+x)))-10(sinx+sinxcosh(acosh(x))/x)", "x"],
+                               ["log(exp((10+x)^2))/(sin(asin(11-1+x)))-10(sinx-sinxcosh(acosh(x))/x)-10", "x"],
                                ["((3-7x2)/(1+x)^3*(1+x)*2-7^(3x-4+2*2))^2", "(2/(1 + x)^2*(3 - 7*x^2) - 7^(3*x))^2"]]:
-            self.assertEqual(symbol_math.simplify(expr, "x"), result)
+            self.assertEqual(result, symbol_math.simplify(expr, "x"))
 
 
 class TestDerivative(unittest.TestCase):

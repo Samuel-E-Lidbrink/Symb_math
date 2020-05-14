@@ -503,7 +503,7 @@ def _group(list_to_group):
                 if is_op:
                     is_op = False
                     if op_inv:
-                        first_level.append(second_level[2:-1])
+                        first_level.append(_group(second_level[2:-1]))
                         op_inv = False
                     elif second_level[0] == "(" and second_level[-1] == ")":
                         first_level.append([op, _group(second_level[1:-1])])
@@ -915,5 +915,4 @@ def _check_expression(expr, variable):
         raise TypeError("Invalid ending operator in expression " + expr)
     if not len(parenthesis_list) == 0:
         raise TypeError("Missing " + str(len(parenthesis_list)) + " ending parenthesis" + " in expression " + expr)
-
 
