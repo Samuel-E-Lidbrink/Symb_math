@@ -378,7 +378,11 @@ def _basic_fix(list_to_fix):
                 list_to_fix = list_to_fix[:index] + list_to_fix[index + 1:]
                 break
             elif thing == "-" and (isinstance(prev_thing, str) and prev_thing in "*/^"):
-                list_to_fix = list_to_fix[:index] + [-float(next_thing)] + list_to_fix[index + 2:]
+                if _is_float(next_thing):
+                    list_to_fix = list_to_fix[:index] + [-float(next_thing)] + list_to_fix[index + 2:]
+                else:
+                    list_to_fix = list_to_fix[:index] + ["-", next_thing] + list_to_fix[index + 2:]
+
                 break
             elif prev_thing == "(" and next_thing == ")":
                 if index-2 < 0 or not isinstance(list_to_fix[index-2], str) or (list_to_fix[index-2] not in
@@ -915,4 +919,5 @@ def _check_expression(expr, variable):
         raise TypeError("Invalid ending operator in expression " + expr)
     if not len(parenthesis_list) == 0:
         raise TypeError("Missing " + str(len(parenthesis_list)) + " ending parenthesis" + " in expression " + expr)
+
 

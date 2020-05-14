@@ -47,12 +47,30 @@ class TestSimplify(unittest.TestCase):
     def test_operators(self):
         for [expr, result] in [["sinxcosx+cosxsinx", "2*cos(x)*sin(x)"],
                                ["log(exp((10+x)^2))/(sin(asin(11-1+x)))-10(sinx-sinxcosh(acosh(x))/x)-10", "x"],
-                               ["((3-7x2)/(1+x)^3*(1+x)*2-7^(3x-4+2*2))^2", "(2/(1 + x)^2*(3 - 7*x^2) - 7^(3*x))^2"]]:
+                               ["(1-x(1-2))/(1+x)", "1"]]:
             self.assertEqual(result, symbol_math.simplify(expr, "x"))
 
 
 class TestDerivative(unittest.TestCase):
-    pass
+    def test_simple(self):
+        for [expr, result] in [["435 +3 -2", "0"], ["x", "1"], ["x^10", "10*x^9"]]:
+            self.assertEqual(result, symbol_math.derivative(expr, "x"))
+
+    def test_mult(self):
+        for [expr, result] in [["x*x", "2*x"], ["(x^2-3)*(1-x)", "-1 + 2*x"], ["x^10/(x+3*x*(x-1))", "10*x^9"]]:
+            self.assertEqual(result, symbol_math.derivative(expr, "x"))
+
+    def test_parenthesis(self):
+        for [expr, result] in [["2-x+3(x+1)", "5 + 2*x"], ["(x-1)*3*(x-1)/(3)", "(-1 + x)^2"],
+                               ["((3-7x2)/(1+x)^3*(1+x)*2-7^(3x-4+2*2))^2", "(2/(1 + x)^2*(3 - 7*x^2) - 7^(3*x))^2"]]:
+            self.assertEqual(result, symbol_math.simplify(expr, "x"))
+
+    def test_operators(self):
+        for [expr, result] in [["sinxcosx+cosxsinx", "2*cos(x)*sin(x)"],
+                               ["log(exp((10+x)^2))/(sin(asin(11-1+x)))-10(sinx-sinxcosh(acosh(x))/x)-10", "x"],
+                               ["(1-x(1-2))/(1+x)", "1"]]:
+            self.assertEqual(result, symbol_math.simplify(expr, "x"))
+
 
 
 class TestEvaluate(unittest.TestCase):
